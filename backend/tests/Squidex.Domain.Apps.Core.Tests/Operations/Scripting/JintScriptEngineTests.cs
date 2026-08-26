@@ -18,6 +18,7 @@ using Squidex.Infrastructure;
 using Squidex.Infrastructure.Json.Objects;
 using Squidex.Infrastructure.Security;
 using Squidex.Infrastructure.Validation;
+using Engine = Jint.Engine;
 
 namespace Squidex.Domain.Apps.Core.Operations.Scripting;
 
@@ -31,7 +32,7 @@ public class JintScriptEngineTests : IClassFixture<TranslationsFixture>
     };
 
     private readonly IHttpClientFactory httpClientFactory = A.Fake<IHttpClientFactory>();
-    private readonly JintScriptEngine sut;
+    private readonly IScriptEngine sut;
 
     public JintScriptEngineTests()
     {
@@ -68,26 +69,20 @@ public class JintScriptEngineTests : IClassFixture<TranslationsFixture>
     {
         private delegate void Delay(Action callback, int time);
 
-        public void ExtendAsync(ScriptExecutionContext context)
+        public void ExtendAsync(Engine engine)
         {
-            context.Engine.SetValue("setTimeout", new Delay((callback, time) =>
+            engine.SetValue("setTimeout", new Delay((callback, time) =>
             {
-                if (time == 0)
+                engine.Schedule(async ct =>
                 {
-                    context.Schedule((scheduler, ct) =>
-                    {
-                        scheduler.Run(callback);
-                        return Task.CompletedTask;
-                    });
-                }
-                else
-                {
-                    context.Schedule(async (scheduler, ct) =>
+                    if (time > 0)
                     {
                         await Task.Delay(time, ct);
-                        scheduler.Run(callback);
-                    });
-                }
+                    }
+
+                    return true;
+                },
+                _ => callback());
             }));
         }
     }
@@ -99,7 +94,7 @@ public class JintScriptEngineTests : IClassFixture<TranslationsFixture>
                 invalid(()
             ";
 
-        await Assert.ThrowsAsync<ValidationException>(() => sut.ExecuteAsync([], script));
+        await Assert.ThrowsAsync<ValidationException>(() => sut.ExecuteAsync([], script).AsTask());
     }
 
     [Fact]
@@ -109,7 +104,7 @@ public class JintScriptEngineTests : IClassFixture<TranslationsFixture>
                 throw 'Error';
             ";
 
-        await Assert.ThrowsAsync<ValidationException>(() => sut.ExecuteAsync([], script));
+        await Assert.ThrowsAsync<ValidationException>(() => sut.ExecuteAsync([], script).AsTask());
     }
 
     [Fact]
@@ -179,7 +174,7 @@ public class JintScriptEngineTests : IClassFixture<TranslationsFixture>
                 throw 'Error';
             ";
 
-        await Assert.ThrowsAsync<ValidationException>(() => sut.TransformAsync([], script));
+        await Assert.ThrowsAsync<ValidationException>(() => sut.TransformAsync([], script).AsTask());
     }
 
     [Fact]
@@ -194,7 +189,7 @@ public class JintScriptEngineTests : IClassFixture<TranslationsFixture>
                 invalid(();
             ";
 
-        await Assert.ThrowsAsync<ValidationException>(() => sut.TransformAsync(vars, script, contentOptions));
+        await Assert.ThrowsAsync<ValidationException>(() => sut.TransformAsync(vars, script, contentOptions).AsTask());
     }
 
     [Fact]
@@ -430,6 +425,217 @@ public class JintScriptEngineTests : IClassFixture<TranslationsFixture>
         var actual = await sut.TransformAsync(vars, script, contentOptions);
 
         Assert.Equal(expected, actual);
+    }
+
+    [Fact]
+    public async Task Should_not_deadlock_if_callback_completes_synchronously()
+    {
+        // The callback runs on the thread of the evaluation, which holds the engine lock at that moment.
+        const string script = @"
+                function delay() {
+                    return new Promise((resolve) => {
+                        setTimeout(function () {
+                            resolve(1);
+                        }, 0);
+                    });
+                }
+
+                (async () => {
+                    let total = 0;
+
+                    for (let i = 0; i < 10; i++) {
+                        total += await delay();
+                    }
+
+                    complete(total);
+                })()
+            ";
+
+        var actual = await sut.ExecuteAsync([], script);
+
+        Assert.Equal(JsonValue.Create(10), actual);
+    }
+
+    [Fact]
+    public async Task Should_throw_if_promise_is_rejected()
+    {
+        const string script = @"
+                (async () => {
+                    await new Promise((resolve, reject) => {
+                        getJSON('http://mockup.squidex.io', function () {
+                            reject('rejected');
+                        });
+                    });
+
+                    complete(42);
+                })()
+            ";
+
+        await Assert.ThrowsAsync<ValidationException>(() => sut.ExecuteAsync([], script).AsTask());
+    }
+
+    [Fact]
+    public async Task Should_not_throw_if_rejected_promise_is_handled()
+    {
+        const string script = @"
+                (async () => {
+                    try {
+                        await new Promise((resolve, reject) => {
+                            getJSON('http://mockup.squidex.io', function () {
+                                reject('rejected');
+                            });
+                        });
+                    } catch (e) {
+                        complete(42);
+                    }
+                })()
+            ";
+
+        var actual = await sut.ExecuteAsync([], script);
+
+        Assert.Equal(JsonValue.Create(42), actual);
+    }
+
+    [Fact]
+    public void Should_not_leak_globals_between_executions()
+    {
+        var script = sut.CreateScript("var actual = typeof leaked; var leaked = 1; actual");
+
+        for (var i = 1; i <= 3; i++)
+        {
+            Assert.Equal(JsonValue.Create("undefined"), script.Execute([]));
+        }
+    }
+
+    [Fact]
+    public void Should_leak_prototype_changes_between_executions_of_same_script()
+    {
+        // The snapshot restores the globals, but it does not undo changes to the prototypes. That is
+        // acceptable because a script is never shared between apps, but it must not go unnoticed.
+        var script = sut.CreateScript("var actual = ({}).polluted; Object.prototype.polluted = 'yes'; typeof actual");
+
+        Assert.Equal(JsonValue.Create("undefined"), script.Execute([]));
+        Assert.Equal(JsonValue.Create("string"), script.Execute([]));
+    }
+
+    [Fact]
+    public void Should_not_leak_prototype_changes_to_other_scripts()
+    {
+        sut.CreateScript("Object.prototype.polluted = 'yes'; 1").Execute([]);
+
+        var script = sut.CreateScript("typeof ({}).polluted");
+
+        Assert.Equal(JsonValue.Create("undefined"), script.Execute([]));
+    }
+
+    [Fact]
+    public void Should_complete_sync_script()
+    {
+        var script = sut.CreateScript("complete(42); 1");
+
+        Assert.Equal(JsonValue.Create(42), script.Execute([]));
+    }
+
+    [Fact]
+    public void Should_transform_with_sync_script()
+    {
+        var vars = new DataScriptVars
+        {
+            ["data"] = new ContentData(),
+        };
+
+        var script = sut.CreateScript("ctx.data.number = { iv: 42 }; replace()", contentOptions);
+
+        var actual = script.Transform(vars);
+
+        Assert.Equal(JsonValue.Create(42), actual["number"]!["iv"]);
+    }
+
+    [Fact]
+    public async Task Should_cancel_async_script()
+    {
+        using var cts = new CancellationTokenSource();
+
+        var script = sut.CreateAsyncScript("while (true) { }");
+
+        await cts.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<Exception>(() => script.ExecuteAsync([], cts.Token).AsTask());
+    }
+
+    [Fact]
+    public async Task Should_run_same_script_in_parallel()
+    {
+        var script = sut.CreateAsyncScript("const factor = 2; value.i * factor");
+
+        var tasks = Enumerable.Range(1, 20).Select(async i =>
+        {
+            var vars = new ScriptVars
+            {
+                ["value"] = new { i },
+            };
+
+            return (i, actual: await script.ExecuteAsync(vars));
+        });
+
+        foreach (var (i, actual) in await Task.WhenAll(tasks))
+        {
+            Assert.Equal(JsonValue.Create(i * 2), actual);
+        }
+    }
+
+    [Fact]
+    public async Task Should_reuse_script_with_callbacks()
+    {
+        var script = sut.CreateAsyncScript(@"
+                const factor = value.i;
+
+                getJSON('http://mockup.squidex.io', function(actual) {
+                    complete(actual.key * factor);
+                });
+            ");
+
+        for (var i = 1; i <= 3; i++)
+        {
+            var vars = new ScriptVars
+            {
+                ["value"] = new { i },
+            };
+
+            Assert.Equal(JsonValue.Create(42 * i), await script.ExecuteAsync(vars));
+        }
+    }
+
+    [Fact]
+    public void Should_reuse_script_with_global_declarations()
+    {
+        var script = sut.CreateScript("const factor = 2; value.i * factor");
+
+        for (var i = 1; i <= 3; i++)
+        {
+            var vars = new ScriptVars
+            {
+                ["value"] = new { i },
+            };
+
+            Assert.Equal(JsonValue.Create(i * 2), script.Execute(vars));
+        }
+    }
+
+    [Fact]
+    public async Task Should_reuse_async_script_with_global_declarations()
+    {
+        var script = sut.CreateAsyncScript("const factor = 2; value.i * factor");
+
+        for (var i = 1; i <= 3; i++)
+        {
+            var vars = new ScriptVars
+            {
+                ["value"] = new { i },
+            };
+
+            Assert.Equal(JsonValue.Create(i * 2), await script.ExecuteAsync(vars));
+        }
     }
 
     [Fact]
@@ -724,498 +930,5 @@ public class JintScriptEngineTests : IClassFixture<TranslationsFixture>
         var result = await sut.ExecuteAsync(vars, script, contentOptions);
 
         Assert.Equal(42.0, result.Value);
-    }
-
-    [Fact]
-    public void Should_not_throw_if_reading_undeclared_identifier()
-    {
-        // Reading an unknown name does not throw, it returns an internal Jint marker string. That is odd,
-        // but it is what scripts have always seen here, see NullPropagation.TryUnresolvableReference.
-        const string script = @"
-                String(unknownName) + '|' + (typeof unknownName);
-            ";
-
-        var actual = sut.Execute(new ScriptVars(), script);
-
-        Assert.Equal(JsonValue.Create("[[Unresolvable]]|undefined"), actual);
-    }
-
-    [Fact]
-    public void Should_null_propagate_over_nullish_property_base()
-    {
-        var vars = new ScriptVars
-        {
-            ["value"] = 13,
-        };
-
-        const string script = @"
-                ctx.unknown.deeper.evenDeeper === undefined;
-            ";
-
-        var actual = sut.Execute(vars, script, new ScriptOptions { AsContext = true });
-
-        Assert.Equal(JsonValue.True, actual);
-    }
-
-    [Fact]
-    public void Should_chain_call_over_nullish_property_base()
-    {
-        var vars = new ScriptVars
-        {
-            ["value"] = 13,
-        };
-
-        const string script = @"
-                ctx.unknown.deeper.someMethod() === undefined;
-            ";
-
-        var actual = sut.Execute(vars, script, new ScriptOptions { AsContext = true });
-
-        Assert.Equal(JsonValue.True, actual);
-    }
-
-    [Fact]
-    public void Should_return_base_if_calling_non_callable_member()
-    {
-        var vars = new ScriptVars
-        {
-            ["value"] = "squidex",
-        };
-
-        const string script = @"
-                ctx.value.notAFunction();
-            ";
-
-        var actual = sut.Execute(vars, script, new ScriptOptions { AsContext = true });
-
-        Assert.Equal(JsonValue.Create("squidex"), actual);
-    }
-
-    [Fact]
-    public void Should_not_change_normal_member_reads_and_calls()
-    {
-        var vars = new ScriptVars
-        {
-            ["value"] = JsonValue.Create(new JsonObject().Add("name", JsonValue.Create("squidex"))),
-        };
-
-        const string script = @"
-                ctx.value.name.toUpperCase();
-            ";
-
-        var actual = sut.Execute(vars, script, new ScriptOptions { AsContext = true });
-
-        Assert.Equal(JsonValue.Create("SQUIDEX"), actual);
-    }
-
-    [Fact]
-    public void Should_convert_enum_to_name()
-    {
-        var vars = new ScriptVars
-        {
-            ["value"] = ScriptScope.ContentScript,
-        };
-
-        const string script = @"
-                value;
-            ";
-
-        var actual = sut.Execute(vars, script);
-
-        Assert.Equal(JsonValue.Create("ContentScript"), actual);
-    }
-
-    [Fact]
-    public void Should_convert_flags_enum_to_names()
-    {
-        var vars = new ScriptVars
-        {
-            ["value"] = ScriptScope.ContentScript | ScriptScope.Transform,
-        };
-
-        const string script = @"
-                value;
-            ";
-
-        var actual = sut.Execute(vars, script);
-
-        Assert.Equal(JsonValue.Create("ContentScript, Transform"), actual);
-    }
-
-    [Fact]
-    public void Should_convert_enum_member_of_wrapped_object_to_name()
-    {
-        var vars = new ScriptVars
-        {
-            ["value"] = new { scope = ScriptScope.Transform },
-        };
-
-        const string script = @"
-                value.scope;
-            ";
-
-        var actual = sut.Execute(vars, script);
-
-        Assert.Equal(JsonValue.Create("Transform"), actual);
-    }
-
-    [Fact]
-    public void Should_project_json_object_with_source_key_order()
-    {
-        var vars = new ScriptVars
-        {
-            ["value"] = CreateJson(),
-        };
-
-        const string script = @"
-                Object.keys(ctx.value).join(',');
-            ";
-
-        var actual = sut.Execute(vars, script, new ScriptOptions { AsContext = true });
-
-        Assert.Equal(JsonValue.Create("name,count,nested,items"), actual);
-    }
-
-    [Fact]
-    public void Should_stringify_projected_json_object()
-    {
-        var vars = new ScriptVars
-        {
-            ["value"] = CreateJson(),
-        };
-
-        const string script = @"
-                JSON.stringify(ctx.value);
-            ";
-
-        var actual = sut.Execute(vars, script, new ScriptOptions { AsContext = true });
-
-        Assert.Equal(
-            JsonValue.Create("{\"name\":\"squidex\",\"count\":3,\"nested\":{\"flag\":true},\"items\":[1,2]}"),
-            actual);
-    }
-
-    [Fact]
-    public void Should_enumerate_projected_json_object()
-    {
-        var vars = new ScriptVars
-        {
-            ["value"] = CreateJson(),
-        };
-
-        const string script = @"
-                var actual = [];
-                for (var key in ctx.value) {
-                    actual.push(key + '=' + (typeof ctx.value[key]));
-                }
-                actual.join(',');
-            ";
-
-        var actual = sut.Execute(vars, script, new ScriptOptions { AsContext = true });
-
-        Assert.Equal(
-            JsonValue.Create("name=string,count=number,nested=object,items=object"),
-            actual);
-    }
-
-    [Fact]
-    public void Should_allow_mutation_of_projected_json_object()
-    {
-        var vars = new ScriptVars
-        {
-            ["value"] = CreateJson(),
-        };
-
-        const string script = @"
-                ctx.value.name = 'changed';
-                ctx.value.added = 42;
-                delete ctx.value.count;
-                ctx.value;
-            ";
-
-        var actual = sut.Execute(vars, script, new ScriptOptions { AsContext = true });
-
-        var expected =
-            JsonValue.Create(
-                new JsonObject()
-                    .Add("name", JsonValue.Create("changed"))
-                    .Add("nested", JsonValue.Create(new JsonObject().Add("flag", JsonValue.True)))
-                    .Add("items", JsonValue.Create(new JsonArray().Add(JsonValue.Create(1)).Add(JsonValue.Create(2))))
-                    .Add("added", JsonValue.Create(42)));
-
-        Assert.Equal(expected, actual);
-    }
-
-    [Fact]
-    public void Should_round_trip_projected_json_object()
-    {
-        var json = CreateJson();
-
-        var vars = new ScriptVars
-        {
-            ["value"] = json,
-        };
-
-        const string script = @"
-                ctx.value;
-            ";
-
-        var actual = sut.Execute(vars, script, new ScriptOptions { AsContext = true });
-
-        Assert.Equal(json, actual);
-    }
-
-    [Fact]
-    public void Should_enumerate_context_keys()
-    {
-        const string script = @"
-                Object.keys(ctx).join(',');
-            ";
-
-        var actual = sut.Execute(CreateVars(), script, new ScriptOptions { AsContext = true });
-
-        Assert.Equal(JsonValue.Create("number,text,json,user"), actual);
-    }
-
-    [Fact]
-    public void Should_answer_in_operator_for_context_keys()
-    {
-        const string script = @"
-                ('json' in ctx) + ',' + ('unknown' in ctx);
-            ";
-
-        var actual = sut.Execute(CreateVars(), script, new ScriptOptions { AsContext = true });
-
-        Assert.Equal(JsonValue.Create("true,false"), actual);
-    }
-
-    [Fact]
-    public void Should_report_types_of_context_values()
-    {
-        const string script = @"
-                var actual = [];
-                for (var key in ctx) {
-                    actual.push(key + '=' + (typeof ctx[key]));
-                }
-                actual.join(',');
-            ";
-
-        var actual = sut.Execute(CreateVars(), script, new ScriptOptions { AsContext = true });
-
-        Assert.Equal(JsonValue.Create("number=number,text=string,json=object,user=object"), actual);
-    }
-
-    [Fact]
-    public void Should_read_context_values()
-    {
-        const string script = @"
-                ctx.number + '|' + ctx.text + '|' + ctx.json.name + '|' + ctx.user.id;
-            ";
-
-        var actual = sut.Execute(CreateVars(), script, new ScriptOptions { AsContext = true });
-
-        Assert.Equal(JsonValue.Create("13|hello|squidex|user1"), actual);
-    }
-
-    [Fact]
-    public void Should_write_context_value_through_to_vars()
-    {
-        var vars = CreateVars();
-
-        const string script = @"
-                ctx.number = ctx.number * 2;
-            ";
-
-        sut.Execute(vars, script, new ScriptOptions { AsContext = true });
-
-        Assert.Equal(26.0, vars["number"]);
-    }
-
-    [Fact]
-    public void Should_delete_context_value()
-    {
-        var vars = CreateVars();
-
-        const string script = @"
-                delete ctx.text;
-                Object.keys(ctx).join(',');
-            ";
-
-        var actual = sut.Execute(vars, script, new ScriptOptions { AsContext = true });
-
-        Assert.Equal(JsonValue.Create("number,json,user"), actual);
-    }
-
-    [Fact]
-    public void Should_not_map_unread_variable()
-    {
-        var principal = new CountingPrincipal();
-
-        var vars = new ScriptVars
-        {
-            ["number"] = 13,
-            ["user"] = principal,
-        };
-
-        const string script = @"
-                number + 1;
-            ";
-
-        var actual = sut.Execute(vars, script);
-
-        Assert.Equal(JsonValue.Create(14), actual);
-        Assert.Equal(0, principal.Reads);
-    }
-
-    [Fact]
-    public void Should_see_unread_variable_in_enumeration()
-    {
-        var principal = new CountingPrincipal();
-
-        var vars = new ScriptVars
-        {
-            ["user"] = principal,
-        };
-
-        const string script = @"
-                ('user' in globalThis) + ',' + (Object.getOwnPropertyNames(globalThis).indexOf('user') >= 0);
-            ";
-
-        var actual = sut.Execute(vars, script);
-
-        Assert.Equal(JsonValue.Create("true,true"), actual);
-        Assert.Equal(0, principal.Reads);
-    }
-
-    [Fact]
-    public void Should_map_variable_on_first_read()
-    {
-        var principal = new CountingPrincipal();
-
-        var vars = new ScriptVars
-        {
-            ["user"] = principal,
-        };
-
-        const string script = @"
-                user.id;
-            ";
-
-        var actual = sut.Execute(vars, script);
-
-        Assert.Equal(JsonValue.Create("user1"), actual);
-        Assert.True(principal.Reads > 0);
-    }
-
-    [Fact]
-    public void Should_not_map_unread_context_variable()
-    {
-        var principal = new CountingPrincipal();
-
-        var vars = new ScriptVars
-        {
-            ["number"] = 13,
-            ["user"] = principal,
-        };
-
-        const string script = @"
-                ctx.number + 1;
-            ";
-
-        var actual = sut.Execute(vars, script, new ScriptOptions { AsContext = true });
-
-        Assert.Equal(JsonValue.Create(14), actual);
-        Assert.Equal(0, principal.Reads);
-    }
-
-    [Fact]
-    public void Should_see_unread_context_variable_in_enumeration()
-    {
-        var principal = new CountingPrincipal();
-
-        var vars = new ScriptVars
-        {
-            ["number"] = 13,
-            ["user"] = principal,
-        };
-
-        const string script = @"
-                Object.keys(ctx).join(',') + '|' + ('user' in ctx);
-            ";
-
-        var actual = sut.Execute(vars, script, new ScriptOptions { AsContext = true });
-
-        Assert.Equal(JsonValue.Create("number,user|true"), actual);
-        Assert.Equal(0, principal.Reads);
-    }
-
-    [Fact]
-    public void Should_map_context_variable_on_first_read()
-    {
-        var principal = new CountingPrincipal();
-
-        var vars = new ScriptVars
-        {
-            ["user"] = principal,
-        };
-
-        const string script = @"
-                ctx.user.id;
-            ";
-
-        var actual = sut.Execute(vars, script, new ScriptOptions { AsContext = true });
-
-        Assert.Equal(JsonValue.Create("user1"), actual);
-        Assert.True(principal.Reads > 0);
-    }
-
-    private sealed class CountingPrincipal : ClaimsPrincipal
-    {
-        public int Reads { get; private set; }
-
-        public CountingPrincipal()
-            : base(new ClaimsIdentity(
-            [
-                new Claim(OpenIdClaims.Subject, "user1"),
-                new Claim(OpenIdClaims.Name, "user"),
-            ], "Squidex"))
-        {
-        }
-
-        public override IEnumerable<Claim> Claims
-        {
-            get
-            {
-                Reads++;
-
-                return base.Claims;
-            }
-        }
-    }
-
-    private static ScriptVars CreateVars()
-    {
-        return new ScriptVars
-        {
-            ["number"] = 13,
-            ["text"] = "hello",
-            ["json"] = CreateJson(),
-            ["user"] = new ClaimsPrincipal(
-                new ClaimsIdentity(
-                [
-                    new Claim(OpenIdClaims.Subject, "user1"),
-                    new Claim(OpenIdClaims.Name, "user"),
-                ], "Squidex")),
-        };
-    }
-
-    private static JsonValue CreateJson()
-    {
-        return JsonValue.Create(
-            new JsonObject()
-                .Add("name", JsonValue.Create("squidex"))
-                .Add("count", JsonValue.Create(3))
-                .Add("nested", JsonValue.Create(new JsonObject().Add("flag", JsonValue.True)))
-                .Add("items", JsonValue.Create(new JsonArray().Add(JsonValue.Create(1)).Add(JsonValue.Create(2)))));
     }
 }

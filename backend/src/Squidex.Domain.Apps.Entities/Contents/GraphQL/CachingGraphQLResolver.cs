@@ -5,7 +5,6 @@
 //  All rights reserved. Licensed under the MIT license.
 // ==========================================================================
 
-using System.Globalization;
 using GraphQL;
 using GraphQL.DI;
 using Microsoft.Extensions.DependencyInjection;
@@ -64,7 +63,11 @@ public sealed class CachingGraphQLResolver(
             return CreateModelAsync(app);
         }
 
-        var cacheKey = CreateCacheKey(app.Id, app.Version.ToString(CultureInfo.InvariantCulture));
+        // The version is not part of the key. Building the schema is expensive and the version
+        // changes for every app event, most of which do not affect the schema at all. The validator
+        // below detects the changes that do, because SchemasHashKey contains the app version as
+        // well as the version of every schema.
+        var cacheKey = (typeof(CachingGraphQLResolver), app.Id);
 
         return cache.GetOrCreateAsync(cacheKey, options.CacheDuration, async entry =>
         {
@@ -84,10 +87,5 @@ public sealed class CachingGraphQLResolver(
         var schemasKey = SchemasHashKey.Create(app, schemasList);
 
         return new CacheEntry(new Builder(app, options).BuildSchema(schemasList), schemasKey);
-    }
-
-    private static object CreateCacheKey(DomainId appId, string etag)
-    {
-        return $"GraphQLModel_{appId}_{etag}";
     }
 }

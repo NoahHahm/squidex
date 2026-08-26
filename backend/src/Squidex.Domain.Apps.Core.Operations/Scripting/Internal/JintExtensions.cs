@@ -7,7 +7,6 @@
 
 using Jint;
 using Jint.Native;
-using Jint.Runtime.Interop;
 using Squidex.Infrastructure;
 
 namespace Squidex.Domain.Apps.Core.Scripting.Internal;
@@ -31,71 +30,5 @@ public static class JintExtensions
         }
 
         return ids;
-    }
-
-    internal static ScriptExecutionContext<T> ExtendWithAsyncFunctions<T>(this ScriptExecutionContext<T> context,
-        IEnumerable<IJintExtension> extensions)
-    {
-        foreach (var extension in extensions)
-        {
-            extension.ExtendAsync(context);
-        }
-
-        return context;
-    }
-
-    internal static ScriptExecutionContext<T> ExtendWithFunctions<T>(this ScriptExecutionContext<T> context,
-        IEnumerable<IJintExtension> extensions)
-    {
-        foreach (var extension in extensions)
-        {
-            extension.Extend(context);
-        }
-
-        return context;
-    }
-
-    internal static ScriptExecutionContext<T> ExtendWithVariables<T>(this ScriptExecutionContext<T> context,
-        ScriptVars vars,
-        ScriptOptions options)
-    {
-        var engine = context.Engine;
-
-        context.CopyFrom(vars);
-
-        if (options.AsContext)
-        {
-            var contextInstance = new WritableContext(engine, vars);
-
-            engine.SetValue("ctx", contextInstance);
-            engine.SetValue("context", contextInstance);
-        }
-        else
-        {
-            foreach (var (key, item) in vars)
-            {
-                // Sets the value, but runs the conversion only when the script reads it for the first time.
-                // The name is added right away, so enumeration and "in" checks work as before.
-                engine.Advanced.AddLazyGlobal(key, e => MapVariable(e, item));
-            }
-        }
-
-        engine.SetValue("async", true);
-
-        return context;
-    }
-
-    /// <summary>
-    /// Converts a value exactly like <see cref="Engine.SetValue(string, object)"/> does, including its
-    /// special case for types, so that a deferred variable cannot look different from an eager one.
-    /// </summary>
-    private static JsValue MapVariable(Engine engine, object? item)
-    {
-        if (item is Type type)
-        {
-            return TypeReference.CreateTypeReference(engine, type);
-        }
-
-        return JsValue.FromObject(engine, item);
     }
 }

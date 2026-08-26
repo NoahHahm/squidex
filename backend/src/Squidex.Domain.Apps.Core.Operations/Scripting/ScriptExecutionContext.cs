@@ -5,170 +5,45 @@
 //  All rights reserved. Licensed under the MIT license.
 // ==========================================================================
 
-using Acornima.Ast;
+using System.Runtime.CompilerServices;
 using Jint;
-using Jint.Native;
-using Squidex.Infrastructure.Tasks;
+using Squidex.Infrastructure;
 
 namespace Squidex.Domain.Apps.Core.Scripting;
 
-public abstract class ScriptExecutionContext(Engine engine) : ScriptVars
+public class ScriptExecutionContext : ScriptVars
 {
-    public Engine Engine { get; } = engine;
+    private static readonly ConditionalWeakTable<Engine, ScriptExecutionContext> Contexts = [];
 
-    public abstract JsValue Evaluate(Prepared<Script> script);
-
-    public abstract Task<JsValue> EvaluateAsync(Prepared<Script> script);
-
-    public abstract void Schedule(Func<IScheduler, CancellationToken, Task> action);
-}
-
-public sealed class ScriptExecutionContext<T> : ScriptExecutionContext, IScheduler
-{
-    private readonly TaskCompletionSource<CompletedValue?> tcs = new TaskCompletionSource<CompletedValue?>();
-    private readonly CancellationToken cancellationToken;
-    private int pendingTasks = 1;
-
-    private sealed class CompletedValue
+    internal ScriptExecutionContext(Engine engine)
     {
-        public T Value { get; init; }
+        // The extensions only get the engine and resolve the context from there.
+        Contexts.AddOrUpdate(engine, this);
     }
 
-    public bool IsCompleted
+    public static ScriptExecutionContext GetContext(Engine engine)
     {
-        get => tcs.Task.Status is TaskStatus.RanToCompletion or TaskStatus.Faulted;
-    }
-
-    internal ScriptExecutionContext(Engine engine, CancellationToken cancellationToken)
-        : base(engine)
-    {
-        this.cancellationToken = cancellationToken;
-    }
-
-    public async Task<T> WaitForCompletionAsync(Func<T> fallback)
-    {
-        TryComplete();
-
-        var result = await tcs.Task.WithCancellation(cancellationToken);
-        if (result == null)
+        if (!Contexts.TryGetValue(engine, out var context))
         {
-            return fallback();
+            ThrowHelper.InvalidOperationException("Engine is not attached to a script context.");
+            return default!;
         }
 
-        return result.Value;
+        return context;
     }
 
-    public void Complete(T value)
+    public virtual void Fail(Exception exception)
     {
-        tcs.TrySetResult(new CompletedValue { Value = value });
+        // The synchronous path reports the error over the exception of the evaluation itself.
     }
 
-    public override JsValue Evaluate(Prepared<Script> script)
+    public virtual void Schedule(Func<CancellationToken, Task> action)
     {
-        return Engine.Evaluate(script);
+        ThrowHelper.NotSupportedException("Async operations are not allowed for this script.");
     }
 
-    public override Task<JsValue> EvaluateAsync(Prepared<Script> script)
+    public virtual void Schedule<TResult>(Func<CancellationToken, Task<TResult>> action, Action<TResult>? callback)
     {
-        return Engine.EvaluateAsync(script, cancellationToken);
+        ThrowHelper.NotSupportedException("Async operations are not allowed for this script.");
     }
-
-    public override void Schedule(Func<IScheduler, CancellationToken, Task> action)
-    {
-        if (IsCompleted)
-        {
-            return;
-        }
-
-        async Task ScheduleAsync()
-        {
-            TryStart();
-            try
-            {
-                await action(this, cancellationToken);
-                TryComplete();
-            }
-            catch (Exception ex)
-            {
-                TryFail(ex);
-            }
-        }
-
-        ScheduleAsync().Forget();
-    }
-
-    void IScheduler.Run(Action? action)
-    {
-        if (IsCompleted || action == null)
-        {
-            return;
-        }
-
-        TryStart();
-        try
-        {
-            lock (Engine)
-            {
-                Engine.Constraints.Reset();
-                action();
-            }
-
-            TryComplete();
-        }
-        catch (Exception ex)
-        {
-            TryFail(ex);
-        }
-    }
-
-    void IScheduler.Run<TArg>(Action<TArg>? action, TArg argument)
-    {
-        if (IsCompleted || action == null)
-        {
-            return;
-        }
-
-        TryStart();
-        try
-        {
-            lock (Engine)
-            {
-                Engine.Constraints.Reset();
-                action(argument);
-            }
-
-            TryComplete(default!);
-        }
-        catch (Exception ex)
-        {
-            TryFail(ex);
-        }
-    }
-
-    private void TryFail(Exception exception)
-    {
-        tcs.TrySetException(exception);
-    }
-
-    private void TryStart()
-    {
-        Interlocked.Increment(ref pendingTasks);
-    }
-
-    private void TryComplete(CompletedValue? result = null)
-    {
-        if (Interlocked.Decrement(ref pendingTasks) <= 0)
-        {
-            tcs.TrySetResult(result);
-        }
-    }
-}
-
-#pragma warning disable MA0048 // File name must match type name
-public interface IScheduler
-#pragma warning restore MA0048 // File name must match type name
-{
-    void Run(Action? action);
-
-    void Run<T>(Action<T>? action, T argument);
 }
