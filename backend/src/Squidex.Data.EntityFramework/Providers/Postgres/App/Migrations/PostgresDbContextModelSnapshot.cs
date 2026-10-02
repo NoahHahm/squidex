@@ -18,7 +18,7 @@ namespace Squidex.Providers.Postgres.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.5")
+                .HasAnnotation("ProductVersion", "10.0.6")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "postgis");
@@ -307,8 +307,8 @@ namespace Squidex.Providers.Postgres.Migrations
                         .HasColumnType("character varying(400)");
 
                     b.Property<string>("Type")
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
 
                     b.HasKey("Id");
 
@@ -331,13 +331,14 @@ namespace Squidex.Providers.Postgres.Migrations
                     b.Property<DateTime>("LastUpdated")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid>("LastVersion")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid")
+                        .HasColumnName("Version");
+
                     b.Property<string>("Value")
                         .IsRequired()
                         .HasColumnType("text");
-
-                    b.Property<Guid>("Version")
-                        .IsConcurrencyToken()
-                        .HasColumnType("uuid");
 
                     b.HasKey("Id");
 
@@ -364,6 +365,41 @@ namespace Squidex.Providers.Postgres.Migrations
                     b.HasIndex("Expires");
 
                     b.ToTable("AssetKeyValueStore_TusMetadata", (string)null);
+                });
+
+            modelBuilder.Entity("Squidex.Domain.Apps.Core.Scripting.ScriptLogRecord", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<string>("AppId")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<string>("Entries")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<DateTimeOffset>("Timestamp")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("TotalEntries")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Timestamp");
+
+                    b.HasIndex("AppId", "Timestamp");
+
+                    b.ToTable("ScriptLogs", (string)null);
                 });
 
             modelBuilder.Entity("Squidex.Domain.Apps.Entities.Apps.EFAppEntity", b =>
@@ -944,6 +980,9 @@ namespace Squidex.Providers.Postgres.Migrations
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
+
+                    b.Property<long?>("Version")
+                        .HasColumnType("bigint");
 
                     b.HasKey("UniqueContentId");
 

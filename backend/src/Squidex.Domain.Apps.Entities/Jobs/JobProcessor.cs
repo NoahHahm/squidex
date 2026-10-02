@@ -54,44 +54,47 @@ public sealed class JobProcessor
     {
         await state.LoadAsync(ct);
 
-        var pending = state.Value.Jobs.Where(x => x.Stopped == null);
-
-        if (pending.Any())
+        var pending = state.Value.Jobs.Where(x => x.Stopped == null).ToList();
+        if (pending.Count == 0)
         {
-            // This should actually never happen, so we log with warning.
-            log.LogWarning("Removed unfinished jobs for owner {ownerId} after start.", ownerId);
-
-            foreach (var job in pending.ToList())
-            {
-                var runner = runners.FirstOrDefault(x => x.Name == job.TaskName);
-
-                if (runner != null)
-                {
-                    await runner.CleanupAsync(job);
-                }
-
-                state.Value.Jobs.Remove(job);
-            }
-
-            await state.WriteAsync(ct);
+            return;
         }
+
+        // This happens when the server has been stopped while the job was running, so we log with warning.
+        LogMessages.LogInterruptedJobs(log, ownerId);
+
+        var now = Clock.GetCurrentInstant();
+
+        foreach (var job in pending)
+        {
+            // Keep the job, so that the user can see that it has been interrupted and start it again.
+            job.Status = JobStatus.Failed;
+            job.Stopped = now;
+            job.Log.Add(new JobLogMessage(now, "The job has been interrupted, because the server has been stopped."));
+
+            var runner = runners.FirstOrDefault(x => x.Name == job.TaskName);
+            if (runner != null)
+            {
+                await runner.CleanupAsync(job);
+            }
+        }
+
+        await state.WriteAsync(ct);
     }
 
     public Task DeleteAsync(DomainId jobId)
     {
         return scheduler.ScheduleAsync(async _ =>
         {
-            log.LogInformation("Clearing jobs for owner {ownerId}.", ownerId);
+            LogMessages.LogClearingJobs(log, ownerId);
 
             var job = state.Value.Jobs.Find(x => x.Id == jobId);
-
             if (job == null)
             {
                 return;
             }
 
             var runner = runners.FirstOrDefault(x => x.Name == job.TaskName);
-
             if (runner != null)
             {
                 await runner.CleanupAsync(job);
@@ -105,7 +108,7 @@ public sealed class JobProcessor
     {
         return scheduler.ScheduleAsync(async _ =>
         {
-            log.LogInformation("Clearing jobs for owner {ownerId}.", ownerId);
+            LogMessages.LogClearingJobs(log, ownerId);
 
             foreach (var job in state.Value.Jobs)
             {
@@ -160,11 +163,12 @@ public sealed class JobProcessor
                     Started = default,
                     Status = JobStatus.Created,
                     TaskName = request.TaskName,
+                    Reference = request.Reference,
                 },
                 OwnerId = ownerId,
             };
 
-            log.LogInformation("Starting new backup with backup id '{backupId}' for owner {ownerId}.", context.Job.Id, ownerId);
+            LogMessages.LogStartingJob(log, context.Job.Id, ownerId);
 
             state.Value.Jobs.Insert(0, context.Job);
             try
@@ -221,7 +225,7 @@ public sealed class JobProcessor
         }
         catch (Exception ex)
         {
-            log.LogError(ex, "Failed to run job with ID {jobId}.", context.Job.Id);
+            LogMessages.LogFailedToRunJob(log, context.Job.Id, ex);
 
             await SetStatusAsync(context, JobStatus.Failed);
         }

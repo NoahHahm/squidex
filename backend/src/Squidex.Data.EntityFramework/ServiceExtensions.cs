@@ -37,6 +37,8 @@ using Squidex.Domain.Apps.Entities.Rules;
 using Squidex.Domain.Apps.Entities.Rules.Repositories;
 using Squidex.Domain.Apps.Entities.Schemas;
 using Squidex.Domain.Apps.Entities.Schemas.Repositories;
+using Squidex.Domain.Apps.Entities.Scripting;
+using Squidex.Domain.Apps.Entities.Scripting.Repositories;
 using Squidex.Domain.Apps.Entities.Teams;
 using Squidex.Domain.Apps.Entities.Teams.Repositories;
 using Squidex.Domain.Users;
@@ -82,7 +84,7 @@ public static class ServiceExtensions
 
                 services.AddPooledDbContextFactory<MySqlAppDbContext>(builder =>
                 {
-                    builder.SetDefaultWarnings();
+                    builder.SetDefaults();
                     builder.UseMySql(connectionString, version, options =>
                     {
                         options.UseNetTopologySuite();
@@ -93,7 +95,7 @@ public static class ServiceExtensions
 
                 services.AddNamedDbContext<MySqlContentDbContext>((builder, name) =>
                 {
-                    builder.SetDefaultWarnings();
+                    builder.SetDefaults();
                     builder.UseBulkInsertMySql();
                     builder.UseMySql(connectionString, version, options =>
                     {
@@ -118,7 +120,7 @@ public static class ServiceExtensions
             {
                 services.AddPooledDbContextFactory<PostgresAppDbContext>(builder =>
                 {
-                    builder.SetDefaultWarnings();
+                    builder.SetDefaults();
                     builder.UseBulkInsertPostgreSql();
                     builder.UseNpgsql(connectionString, options =>
                     {
@@ -128,7 +130,7 @@ public static class ServiceExtensions
 
                 services.AddNamedDbContext<PostgresContentDbContext>((builder, name) =>
                 {
-                    builder.SetDefaultWarnings();
+                    builder.SetDefaults();
                     builder.UseBulkInsertPostgreSql();
                     builder.UseNpgsql(connectionString, options =>
                     {
@@ -152,7 +154,7 @@ public static class ServiceExtensions
             {
                 services.AddPooledDbContextFactory<SqlServerAppDbContext>(builder =>
                 {
-                    builder.SetDefaultWarnings();
+                    builder.SetDefaults();
                     builder.UseSqlServer(connectionString, options =>
                     {
                         options.UseNetTopologySuite();
@@ -162,7 +164,7 @@ public static class ServiceExtensions
 
                 services.AddNamedDbContext<SqlServerContentDbContext>((builder, name) =>
                 {
-                    builder.SetDefaultWarnings();
+                    builder.SetDefaults();
                     builder.UseBulkInsertSqlServer();
                     builder.UseSqlServer(connectionString, options =>
                     {
@@ -237,6 +239,9 @@ public static class ServiceExtensions
         services.AddSingletonAs<EFHistoryEventRepository<TContext>>()
             .As<IHistoryEventRepository>().As<IDeleter>();
 
+        services.AddSingletonAs<EFScriptLogRepository<TContext>>()
+            .As<IScriptLogRepository>();
+
         services.AddSingletonAs<EFRequestLogRepository<TContext>>()
             .As<IRequestLogRepository>();
 
@@ -271,7 +276,6 @@ public static class ServiceExtensions
             .AddEntityFrameworkStore<TContext, CronJobContext>();
 
         services.AddEntityFrameworkAssetKeyValueStore<TContext, TusMetadata>();
-        services.AddSingletonAs<SqlDialectInitializer<TContext>>();
     }
 
     public static void AddSquidexEntityFrameworkEventStore(this IServiceCollection services, IConfiguration config)

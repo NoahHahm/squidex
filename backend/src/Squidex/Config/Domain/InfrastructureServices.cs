@@ -17,9 +17,13 @@ using Squidex.Domain.Apps.Core.Scripting.Extensions;
 using Squidex.Domain.Apps.Core.Tags;
 using Squidex.Domain.Apps.Core.Templates;
 using Squidex.Domain.Apps.Core.Templates.Extensions;
+using Squidex.Domain.Apps.Entities;
 using Squidex.Domain.Apps.Entities.Contents.Counter;
+using Squidex.Domain.Apps.Entities.Scripting;
 using Squidex.Domain.Apps.Entities.Tags;
+using Squidex.Hosting.Ssrf;
 using Squidex.Infrastructure;
+using Squidex.Infrastructure.Caching;
 using Squidex.Infrastructure.Diagnostics;
 using Squidex.Infrastructure.Log;
 using Squidex.Infrastructure.Translations;
@@ -42,20 +46,36 @@ public static class InfrastructureServices
         services.Configure<JintScriptOptions>(config,
             "scripting");
 
+        services.Configure<ScriptLogOptions>(config,
+            "scripting:logs");
+
         services.Configure<DiagnoserOptions>(config,
             "diagnostics");
 
-        services.AddHttpClient("Jint");
+        services.AddHttpClient("Jint")
+            .EnableSsrfProtection();
 
         services.AddReplicatedCache();
         services.AddAsyncLocalCache();
         services.AddBackgroundCache();
+
+        services.AddHybridCache()
+            .AddSerializerFactory<JsonHybridCacheSerializerFactory>();
+
+        services.Configure<CacheGenerationsOptions>(config,
+            "caching:generations");
+
+        services.AddSingletonAs<CacheGenerations>()
+            .As<ICacheGenerations>();
 
         services.AddSingletonAs(_ => SystemClock.Instance)
             .As<IClock>();
 
         services.AddSingletonAs<BackgroundRequestLogStore>()
             .AsOptional<IRequestLogStore>();
+
+        services.AddSingletonAs<BackgroundScriptLogStore>()
+            .As<IScriptLogStore>().As<IDeleter>();
 
         services.AddSingletonAs<Diagnoser>()
             .AsSelf();
@@ -73,6 +93,9 @@ public static class InfrastructureServices
             .As<IJintExtension>().As<IScriptDescriptor>();
 
         services.AddSingletonAs<HttpRequestJintExtension>()
+            .As<IJintExtension>().As<IScriptDescriptor>();
+
+        services.AddSingletonAs<ConsoleJintExtension>()
             .As<IJintExtension>().As<IScriptDescriptor>();
 
         services.AddSingletonAs<DateTimeJintExtension>()

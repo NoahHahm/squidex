@@ -36,7 +36,7 @@ public abstract class TextIndexerStateTests : GivenContext
 
         await sut.SetAsync(
         [
-            new TextContentState { UniqueContentId = id1, State = TextState.Stage0_Draft__Stage1_None },
+            new TextContentState { UniqueContentId = id1, State = TextState.Stage0_Draft__Stage1_None, Version = 3 },
             new TextContentState { UniqueContentId = id2, State = TextState.Stage0_Published__Stage1_Draft },
             new TextContentState { UniqueContentId = id3, State = TextState.Stage0_Published__Stage1_None },
         ]);
@@ -45,8 +45,33 @@ public abstract class TextIndexerStateTests : GivenContext
 
         actual.Should().BeEquivalentTo(new Dictionary<UniqueContentId, TextContentState>
         {
-            [id1] = new TextContentState { UniqueContentId = id1, State = TextState.Stage0_Draft__Stage1_None },
+            [id1] = new TextContentState { UniqueContentId = id1, State = TextState.Stage0_Draft__Stage1_None, Version = 3 },
             [id2] = new TextContentState { UniqueContentId = id2, State = TextState.Stage0_Published__Stage1_Draft },
+        });
+    }
+
+    [Fact]
+    public async Task Should_update_state()
+    {
+        var sut = await CreateSutAsync(contentRepository);
+
+        var id1 = new UniqueContentId(AppId.Id, DomainId.NewGuid());
+
+        await sut.SetAsync(
+        [
+            new TextContentState { UniqueContentId = id1, State = TextState.Stage0_Draft__Stage1_None },
+        ]);
+
+        await sut.SetAsync(
+        [
+            new TextContentState { UniqueContentId = id1, State = TextState.Stage0_Published__Stage1_None },
+        ]);
+
+        var actual = await sut.GetAsync(HashSet.Of(id1));
+
+        actual.Should().BeEquivalentTo(new Dictionary<UniqueContentId, TextContentState>
+        {
+            [id1] = new TextContentState { UniqueContentId = id1, State = TextState.Stage0_Published__Stage1_None },
         });
     }
 

@@ -5,6 +5,7 @@
 //  All rights reserved. Licensed under the MIT license.
 // ==========================================================================
 
+using System.Collections.Concurrent;
 using System.Security.Claims;
 using Squidex.Domain.Apps.Core.Apps;
 using Squidex.Infrastructure;
@@ -19,17 +20,27 @@ namespace Squidex.Domain.Apps.Entities;
 
 public sealed class Context
 {
-    private static readonly IReadOnlyDictionary<string, string> EmptyHeaders = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    private static readonly SortedDictionary<string, string> EmptyHeaders = new SortedDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    private static readonly char[] Separators = [',', ';'];
 
-    public IReadOnlyDictionary<string, string> Headers { get; private set; }
+    // Splitting a header is not free and the same headers are read several times per request, for
+    // example once per schema of a query. A concurrent dictionary is used because a context is
+    // shared between the parallel resolvers of a GraphQL query. The context is immutable, so the
+    // parsed values never have to be invalidated.
+    private readonly ConcurrentDictionary<string, string[]> headerValues = new ConcurrentDictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+
+    // The headers are sorted, so that they can be serialized to stable cache keys.
+    private readonly SortedDictionary<string, string> headers;
+
+    public IReadOnlyDictionary<string, string> Headers => headers;
 
     public ClaimsPermissions UserPermissions { get; }
 
     public ClaimsPrincipal UserPrincipal { get; }
 
-    public App App { get; set; }
+    public App App { get; }
 
-    public bool IsFrontendClient => UserPrincipal.IsInClient(DefaultClients.Frontend);
+    public bool IsFrontendClient { get; }
 
     public Context(ClaimsPrincipal user, App app)
         : this(app, user, user.Claims.Permissions(), EmptyHeaders)
@@ -41,14 +52,16 @@ public sealed class Context
         App app,
         ClaimsPrincipal userPrincipal,
         ClaimsPermissions userPermissions,
-        IReadOnlyDictionary<string, string> headers)
+        SortedDictionary<string, string> headers)
     {
         App = app;
 
         UserPrincipal = userPrincipal;
         UserPermissions = userPermissions;
 
-        Headers = headers;
+        IsFrontendClient = userPrincipal.IsInClient(DefaultClients.Frontend);
+
+        this.headers = headers;
     }
 
     public static Context Anonymous(App app)
@@ -69,6 +82,25 @@ public sealed class Context
         return new Context(claimsPrincipal, app);
     }
 
+    internal string[] HeaderValues(string key)
+    {
+        if (headerValues.TryGetValue(key, out var result))
+        {
+            return result;
+        }
+
+        if (!Headers.TryGetValue(key, out var value))
+        {
+            return [];
+        }
+
+        result = value.Split(Separators, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Distinct().ToArray();
+
+        headerValues[key] = result;
+
+        return result;
+    }
+
     public bool Allows(string permissionId, string schema = Permission.Any)
     {
         return UserPermissions.Allows(permissionId, App.Name, schema);
@@ -76,7 +108,7 @@ public sealed class Context
 
     private sealed class HeaderBuilder(Context context) : ICloneBuilder
     {
-        private Dictionary<string, string>? headers;
+        private SortedDictionary<string, string>? headers;
 
         public Context Build()
         {
@@ -88,33 +120,22 @@ public sealed class Context
             return context;
         }
 
-        public Context Update()
-        {
-            context.Headers = headers ?? context.Headers;
-
-            return context;
-        }
-
         public void Remove(string key)
         {
-            headers ??= new Dictionary<string, string>(context.Headers, StringComparer.OrdinalIgnoreCase);
+            headers ??= new SortedDictionary<string, string>(context.headers, StringComparer.OrdinalIgnoreCase);
             headers.Remove(key);
         }
 
         public void SetHeader(string key, string value)
         {
-            headers ??= new Dictionary<string, string>(context.Headers, StringComparer.OrdinalIgnoreCase);
+            headers ??= new SortedDictionary<string, string>(context.headers, StringComparer.OrdinalIgnoreCase);
             headers[key] = value;
         }
     }
 
-    public Context Change(Action<ICloneBuilder> action)
+    public Context WithApp(App app)
     {
-        var builder = new HeaderBuilder(this);
-
-        action(builder);
-
-        return builder.Update();
+        return new Context(app, UserPrincipal, UserPermissions, headers);
     }
 
     public Context Clone(Action<ICloneBuilder> action)

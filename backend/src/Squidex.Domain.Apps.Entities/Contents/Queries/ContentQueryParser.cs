@@ -90,9 +90,9 @@ public class ContentQueryParser(
 
         var searchFilters = new List<CompareFilter<ClrValue>>();
 
-        var textQuery = new TextQuery(query.FullText, 1000)
+        var textQuery = new TextQuery(query.FullText, options.MaxFullTextResults)
         {
-            PreferredSchemaId = schema.Id,
+            RequiredSchemaIds = [schema.Id],
         };
 
         var fullTextIds = await textIndex.SearchAsync(context.App, textQuery, context.Scope(), ct);
@@ -143,7 +143,7 @@ public class ContentQueryParser(
 
         if (schema != null)
         {
-            components = await appprovider.GetComponentsAsync(schema, ct);
+            components = await appprovider.GetComponentsAsync(schema, ct: ct);
         }
 
         var query = q.Query;
@@ -277,19 +277,19 @@ public class ContentQueryParser(
     {
         if (schema == null)
         {
-            return $"EDM/__generic";
+            return $"EDM/{app.Id}/{app.Version}/{withHidden}";
         }
 
-        return $"EDM/{app.Version}/{schema.Id}_{schema.Version}/{withHidden}";
+        return $"EDM/{app.Id}/{app.Version}/{schema.Id}_{schema.Version}/{withHidden}";
     }
 
     private static string BuildJsonCacheKey(App app, Schema? schema, bool withHidden)
     {
         if (schema == null)
         {
-            return $"JSON/__generic";
+            return $"JSON/{app.Id}/{app.Version}/{withHidden}";
         }
 
-        return $"JSON/{app.Version}/{schema.Id}_{schema.Version}/{withHidden}";
+        return $"JSON/{app.Id}/{app.Version}/{schema.Id}_{schema.Version}/{withHidden}";
     }
 }

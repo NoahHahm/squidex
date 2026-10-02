@@ -23,8 +23,10 @@ public sealed partial class UsageGate(
     IUsageTracker usageTracker)
     : IUsageGate
 {
+    // The cache is keyed by app, therefore it needs an upper bound to not grow with the number of tenants.
+    private const long CacheSizeLimit = 10_000;
     private static readonly DateOnly SummaryDate = default;
-    private readonly IMemoryCache memoryCache = new MemoryCache(Options.Create(new MemoryCacheOptions()));
+    private readonly IMemoryCache memoryCache = new MemoryCache(Options.Create(new MemoryCacheOptions { SizeLimit = CacheSizeLimit }));
 
     public async Task TrackRequestAsync(App app, string? clientId, DateOnly date, double costs, long elapsedMs, long bytes,
        CancellationToken ct = default)
@@ -89,12 +91,23 @@ public sealed partial class UsageGate(
 
     private bool HasNotifiedBefore(DomainId appId)
     {
-        return memoryCache.Get<bool>(appId);
+        return memoryCache.Get<bool>(NotifiedKey(appId));
     }
 
     private bool TrackNotified(DomainId appId)
     {
-        return memoryCache.Set(appId, true, TimeSpan.FromHours(1));
+        return memoryCache.Set(NotifiedKey(appId), true, new MemoryCacheEntryOptions
+        {
+            AbsoluteExpirationRelativeToNow = TimeSpan.FromHours(1),
+
+            // The cache has a size limit, therefore every entry must define a size. All entries are counted equally.
+            Size = 1,
+        });
+    }
+
+    private static object NotifiedKey(DomainId appId)
+    {
+        return (typeof(UsageGate), nameof(TrackNotified), appId);
     }
 
     private static string[] GetUsers(App app)
@@ -130,6 +143,9 @@ public sealed partial class UsageGate(
         {
             x.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(10);
 
+            // The cache has a size limit, therefore every entry must define a size. All entries are counted equally.
+            x.Size = 1;
+
             return await GetPlanCoreAsync(app, ct);
         });
     }
@@ -145,6 +161,9 @@ public sealed partial class UsageGate(
         return memoryCache.GetOrCreateAsync(CacheKey(appId), async x =>
         {
             x.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(10);
+
+            // The cache has a size limit, therefore every entry must define a size. All entries are counted equally.
+            x.Size = 1;
 
             return await GetPlanCoreAsync(appId, ct);
         });
@@ -192,8 +211,8 @@ public sealed partial class UsageGate(
         return Task.FromResult((plan, planId));
     }
 
-    private static string CacheKey(DomainId appId)
+    private static object CacheKey(DomainId appId)
     {
-        return $"{appId}_Plan";
+        return (typeof(UsageGate), nameof(GetPlanForAppAsync), appId);
     }
 }

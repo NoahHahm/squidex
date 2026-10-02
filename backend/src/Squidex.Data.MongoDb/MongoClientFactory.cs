@@ -8,12 +8,15 @@
 using System.Text.Json;
 using MongoDB.Bson;
 using MongoDB.Driver;
+using MongoDB.Driver.Authentication.AWS;
+using Squidex.Domain.Apps.Core.Contents;
 using Squidex.Domain.Apps.Entities;
 using Squidex.Domain.Apps.Entities.Assets;
 using Squidex.Domain.Apps.Entities.Contents;
 using Squidex.Domain.Apps.Entities.Contents.Text;
 using Squidex.Domain.Apps.Entities.History;
 using Squidex.Domain.Apps.Entities.MongoDb;
+using Squidex.Domain.Apps.Entities.Scripting;
 using Squidex.Domain.Users;
 using Squidex.Infrastructure;
 using Squidex.Infrastructure.Json.Objects;
@@ -22,14 +25,19 @@ namespace Squidex;
 
 public static class MongoClientFactory
 {
+    private static int awsAuthenticationRegistered;
+
     public static void SetupSerializer(JsonSerializerOptions jsonSerializerOptions, BsonType representation)
     {
         // Register the serializers first.
         BsonDomainIdSerializer.Register();
         BsonEscapedDictionarySerializer<JsonValue, JsonObject>.Register();
+        BsonEscapedDictionarySerializer<JsonValue, ContentFieldData>.Register();
+        BsonEscapedDictionarySerializer<ContentFieldData, ContentData>.Register();
         BsonInstantSerializer.Register();
         BsonJsonValueSerializer.Register();
         BsonStringSerializer<RefToken>.Register();
+        BsonStringSerializer<Status>.Register();
         BsonUniqueContentIdSerializer.Register();
         BsonJsonConvention.Register(jsonSerializerOptions, representation);
 
@@ -41,6 +49,7 @@ public static class MongoClientFactory
         MongoAssetFolderEntity.RegisterClassMap();
         MongoContentEntity.RegisterClassMap();
         MongoHistoryClassMap.RegisterClassMap();
+        MongoScriptLogClassMap.RegisterClassMap();
         MongoIdentityClassMap.RegisterClassMap();
         MongoTextStateClassMap.RegisterClassMap();
 
@@ -49,6 +58,11 @@ public static class MongoClientFactory
 
     public static MongoClient Create(string? connectionString, Action<MongoClientSettings>? configure = null)
     {
+        if (Interlocked.Exchange(ref awsAuthenticationRegistered, 1) == 0)
+        {
+            MongoClientSettings.Extensions.AddAWSAuthentication();
+        }
+
         var clientSettings = MongoClientSettings.FromConnectionString(connectionString);
 
         // If we really need custom config.

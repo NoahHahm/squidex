@@ -65,6 +65,10 @@ export class AppDto extends generated.AppDto {
         return this.compute('canReadSchemas', () => hasAnyLink(this._links, 'schemas'));
     }
 
+    public get canReadScriptLogs() {
+        return this.compute('canReadScriptLogs', () => hasAnyLink(this._links, 'script-logs'));
+    }
+
     public get canReadWorkflows() {
         return this.compute('canReadWorkflows', () => hasAnyLink(this._links, 'workflows'));
     }
@@ -212,6 +216,10 @@ export class AuthSchemeResponseDto extends generated.AuthSchemeResponseDto {
 }
 
 export class ClientDto extends generated.ClientDto {
+    public get canRegenerateSecret() {
+        return this.compute('canRegenerateSecret', () => hasAnyLink(this._links, 'secret'));
+    }
+
     public get canRevoke() {
         return this.compute('canRevoke', () => hasAnyLink(this._links, 'delete'));
     }
@@ -237,7 +245,7 @@ export class ContentDto extends generated.ContentDto {
     }
 
     public get canDelete() {
-        return this.compute('canDelete', () => hasAnyLink(this._links, 'update'));
+        return this.compute('canDelete', () => hasAnyLink(this._links, 'delete'));
     }
 
     public get canDraftCreate() {
@@ -455,6 +463,10 @@ export class JobsDto extends generated.JobsDto {
     public get canCreateBackup() {
         return this.compute('canCreateBackup', () => hasAnyLink(this._links, 'create/backups'));
     }
+
+    public get canRebuildTextIndex() {
+        return this.compute('canRebuildTextIndex', () => hasAnyLink(this._links, 'create/text-index'));
+    }
 }
 
 export class RoleDto extends generated.RoleDto {
@@ -484,6 +496,14 @@ export class SchemaDto extends generated.SchemaDto {
 
     public get canContentsCreateAndPublish() {
         return this.compute('canContentsCreateAndPublish', () => hasAnyLink(this._links, 'contents/create/publish'));
+    }
+
+    public get canContentsExport() {
+        return this.compute('canContentsExport', () => hasAnyLink(this._links, 'contents/export'));
+    }
+
+    public get canContentsMigrate() {
+        return this.compute('canContentsMigrate', () => hasAnyLink(this._links, 'contents/migrate'));
     }
 
     public get canContentsRead() {

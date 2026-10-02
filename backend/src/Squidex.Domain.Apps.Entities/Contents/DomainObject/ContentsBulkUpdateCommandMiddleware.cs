@@ -61,7 +61,7 @@ public sealed class ContentsBulkUpdateCommandMiddleware(
             return;
         }
 
-        contextProvider.Context.Change(b => b
+        contextProvider.Context = contextProvider.Context.Clone(b => b
             .WithNoEnrichment()
             .WithNoCleanup()
             .WithUnpublished(true)
@@ -184,6 +184,10 @@ public sealed class ContentsBulkUpdateCommandMiddleware(
                 case BulkUpdateContentType.EnrichDefaults:
                     return CreateTask<EnrichContentDefaults>(id, schemaId, bulkJob, bulk, jobIndex,
                         PermissionIds.AppContentsUpdateOwn);
+
+                case BulkUpdateContentType.Migrate:
+                    return CreateTask<MigrateContent>(id, schemaId, bulkJob, bulk, jobIndex,
+                        PermissionIds.AppSchemasMigrate);
 
                 case BulkUpdateContentType.ChangeStatus:
                     return CreateTask<ChangeContentStatus>(id, schemaId, bulkJob, bulk, jobIndex,

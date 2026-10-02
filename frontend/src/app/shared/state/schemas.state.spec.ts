@@ -7,7 +7,7 @@
 
 import { firstValueFrom, of, onErrorResumeNextWith, throwError } from 'rxjs';
 import { IMock, It, Mock, Times } from 'typemoq';
-import { AddFieldDto, ChangeCategoryDto, ConfigureFieldRulesDto, ConfigureUIFieldsDto, CreateSchemaDto, DialogService, SchemaDto, SchemasDto, SchemasService, SynchronizeSchemaDto, UpdateFieldDto, UpdateSchemaDto, versioned } from '@app/shared/internal';
+import { AddFieldDto, ChangeCategoryDto, ConfigureFieldRulesDto, ConfigureUIFieldsDto, CreateSchemaDto, DialogService, ExportContentsDto, MigrateContentsDto, SchemaDto, SchemasDto, SchemasService, SynchronizeSchemaDto, UpdateFieldDto, UpdateSchemaDto, versioned } from '@app/shared/internal';
 import { createSchema } from '../services/schemas.service.spec';
 import { TestValues } from './_test-helpers';
 import { getCategoryTree, SchemasState } from './schemas.state';
@@ -51,7 +51,6 @@ describe('SchemasState', () => {
 
             expect(schemasState.snapshot.schemas).toEqualIgnoringProps(oldSchemas.items);
             expect(schemasState.snapshot.isLoaded).toBeTruthy();
-
             schemasService.verifyAll();
         });
 
@@ -65,7 +64,6 @@ describe('SchemasState', () => {
             expect(schemasState.snapshot.isLoaded).toBeTruthy();
             expect(schemasState.snapshot.isLoading).toBeFalsy();
             expect(schemasState.snapshot.schemas).toEqualIgnoringProps(oldSchemas.items);
-
             schemasService.verifyAll();
         });
 
@@ -187,6 +185,39 @@ describe('SchemasState', () => {
             schemasState.changeCategory(schema1, request.name!).subscribe();
 
             expect(schemasState.snapshot.schemas).toEqualIgnoringProps([updated, schema2]);
+        });
+
+        it('should notify if content migration has been started', () => {
+            const request = new MigrateContentsDto({ migrateDraft: false, migratePublished: true });
+
+            schemasService.setup(x => x.postContentMigration(app, schema1, It.isValue(request)))
+                .returns(() => of({})).verifiable();
+
+            schemasState.migrateContents(schema1, request).subscribe();
+
+            dialogs.verify(x => x.notifyInfo(It.isAnyString()), Times.once());
+        });
+
+        it('should notify if content export has been started', () => {
+            const request = new ExportContentsDto({ format: 'Csv' });
+
+            schemasService.setup(x => x.postContentExport(app, schema1, It.isValue(request)))
+                .returns(() => of({})).verifiable();
+
+            schemasState.exportContents(schema1, request).subscribe();
+
+            dialogs.verify(x => x.notifyInfo(It.isAnyString()), Times.once());
+        });
+
+        it('should not change schemas if content migration has been started', () => {
+            const request = new MigrateContentsDto({ migrateDraft: true, migratePublished: true });
+
+            schemasService.setup(x => x.postContentMigration(app, schema1, It.isValue(request)))
+                .returns(() => of({})).verifiable();
+
+            schemasState.migrateContents(schema1, request).subscribe();
+
+            expect(schemasState.snapshot.schemas).toEqualIgnoringProps([schema1, schema2]);
         });
 
         describe('with selection', () => {

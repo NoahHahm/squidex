@@ -152,6 +152,12 @@
         contents/create/publish: {
           Method: POST
         },
+        contents/export: {
+          Method: POST
+        },
+        contents/migrate: {
+          Method: POST
+        },
         delete: {
           Method: DELETE
         },
@@ -343,6 +349,12 @@
           Method: POST
         },
         contents/create/publish: {
+          Method: POST
+        },
+        contents/export: {
+          Method: POST
+        },
+        contents/migrate: {
           Method: POST
         },
         delete: {

@@ -42,7 +42,6 @@ describe('ClientsState', () => {
             expect(clientsState.snapshot.isLoaded).toBeTruthy();
             expect(clientsState.snapshot.isLoading).toBeFalsy();
             expect(clientsState.snapshot.version).toEqual(version);
-
             dialogs.verify(x => x.notifyInfo(It.isAnyString()), Times.never());
         });
 
@@ -108,6 +107,17 @@ describe('ClientsState', () => {
                 .returns(() => of(versioned(newVersion, updated))).verifiable();
 
             clientsState.update(oldClients.items[0], request).subscribe();
+
+            expectNewClients(updated);
+        });
+
+        it('should update clients if secret regenerated', () => {
+            const updated = createClients(1, 2, 3);
+
+            clientsService.setup(x => x.putClientSecret(app, oldClients.items[0], version))
+                .returns(() => of(versioned(newVersion, updated))).verifiable();
+
+            clientsState.regenerateSecret(oldClients.items[0]).subscribe();
 
             expectNewClients(updated);
         });

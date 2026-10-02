@@ -25,6 +25,9 @@ public static class PermissionIds
     // Backup Admin
     public const string AdminRestore = "squidex.admin.restore";
 
+    // Text Index Admin
+    public const string AdminTextIndex = "squidex.admin.text-index";
+
     // Event Admin
     public const string AdminEvents = "squidex.admin.events";
     public const string AdminEventsRead = "squidex.admin.events.read";
@@ -34,6 +37,7 @@ public static class PermissionIds
     public const string AdminUsers = "squidex.admin.users";
     public const string AdminUsersRead = "squidex.admin.users.read";
     public const string AdminUsersCreate = "squidex.admin.users.create";
+    public const string AdminUsersDelete = "squidex.admin.users.delete";
     public const string AdminUsersUpdate = "squidex.admin.users.update";
     public const string AdminUsersUnlock = "squidex.admin.users.unlock";
     public const string AdminUsersLock = "squidex.admin.users.lock";
@@ -181,6 +185,10 @@ public static class PermissionIds
     public const string AppAssetSScriptsRead = "squidex.apps.{app}.asset-scripts.read";
     public const string AppAssetsScriptsUpdate = "squidex.apps.{app}.asset-scripts.update";
 
+    // App Script Logs
+    public const string AppScriptLogs = "squidex.apps.{app}.script-logs";
+    public const string AppScriptLogsRead = "squidex.apps.{app}.script-logs.read";
+
     // App Rules
     public const string AppRules = "squidex.apps.{app}.rules";
     public const string AppRulesRead = "squidex.apps.{app}.rules.read";
@@ -205,6 +213,7 @@ public static class PermissionIds
     public const string AppSchemasPublish = "squidex.apps.{app}.schemas.{schema}.publish";
     public const string AppSchemasDelete = "squidex.apps.{app}.schemas.{schema}.delete";
     public const string AppSchemasIndexes = "squidex.apps.{app}.schemas.{schema}.indexes";
+    public const string AppSchemasMigrate = "squidex.apps.{app}.schemas.{schema}.migrate";
 
     // App Contents
     public const string AppContents = "squidex.apps.{app}.contents.{schema}";

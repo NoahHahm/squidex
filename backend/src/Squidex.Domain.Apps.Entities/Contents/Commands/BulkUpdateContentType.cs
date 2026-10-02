@@ -17,4 +17,5 @@ public enum BulkUpdateContentType
     Update,
     Validate,
     EnrichDefaults,
+    Migrate,
 }

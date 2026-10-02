@@ -5,6 +5,7 @@
 //  All rights reserved. Licensed under the MIT license.
 // ==========================================================================
 
+using Jint;
 using Jint.Native;
 using Squidex.Domain.Apps.Core.Properties;
 using Squidex.Domain.Apps.Core.Rules.EnrichedEvents;
@@ -18,60 +19,11 @@ public sealed class EventJintExtension(IUrlGenerator urlGenerator) : IJintExtens
 {
     private delegate JsValue EventDelegate();
 
-    private sealed class FlowConsoleWrapper
+    public void Extend(Engine engine)
     {
-        public static readonly FlowConsoleWrapper Instance = new FlowConsoleWrapper();
-
-#pragma warning disable CA1822 // Mark members as static
-        private void LogCore(string? message, string prefix)
-#pragma warning restore CA1822 // Mark members as static
+        engine.SetValue("contentAction", new EventDelegate(() =>
         {
-            if (string.IsNullOrWhiteSpace(message))
-            {
-                return;
-            }
-
-            if (!string.IsNullOrWhiteSpace(prefix))
-            {
-                message = $"{prefix}: {message}";
-            }
-
-            FlowConsole.Out(message);
-        }
-
-        public void Log(string message)
-        {
-            LogCore(message, string.Empty);
-        }
-
-        public void Info(string message)
-        {
-            LogCore(message, "INFO");
-        }
-
-        public void Warn(string message)
-        {
-            LogCore(message, "WARN");
-        }
-
-        public void Error(string message)
-        {
-            LogCore(message, "ERROR");
-        }
-
-        public void Debug(string message)
-        {
-            LogCore(message, "DEBUG");
-        }
-    }
-
-    public void Extend(ScriptExecutionContext context)
-    {
-        context.Engine.SetValue("console", FlowConsoleWrapper.Instance);
-
-        context.Engine.SetValue("contentAction", new EventDelegate(() =>
-        {
-            if (context.TryGetValue("event", out var temp) && temp is EnrichedContentEvent contentEvent)
+            if (engine.TryGetVar<EnrichedContentEvent>("event", out var contentEvent))
             {
                 return contentEvent.Status.ToString();
             }
@@ -79,9 +31,9 @@ public sealed class EventJintExtension(IUrlGenerator urlGenerator) : IJintExtens
             return JsValue.Null;
         }));
 
-        context.Engine.SetValue("contentUrl", new EventDelegate(() =>
+        engine.SetValue("contentUrl", new EventDelegate(() =>
         {
-            if (context.TryGetValue("event", out var temp) && temp is EnrichedContentEvent contentEvent)
+            if (engine.TryGetVar<EnrichedContentEvent>("event", out var contentEvent))
             {
                 return urlGenerator.ContentUI(contentEvent.AppId, contentEvent.SchemaId, contentEvent.Id);
             }
@@ -89,9 +41,9 @@ public sealed class EventJintExtension(IUrlGenerator urlGenerator) : IJintExtens
             return JsValue.Null;
         }));
 
-        context.Engine.SetValue("assetContentSlugUrl", new EventDelegate(() =>
+        engine.SetValue("assetContentSlugUrl", new EventDelegate(() =>
         {
-            if (context.TryGetValue("event", out var temp) && temp is EnrichedAssetEvent assetEvent)
+            if (engine.TryGetVar<EnrichedAssetEvent>("event", out var assetEvent))
             {
                 return urlGenerator.AssetContent(assetEvent.AppId, assetEvent.FileName.Slugify());
             }
@@ -101,7 +53,7 @@ public sealed class EventJintExtension(IUrlGenerator urlGenerator) : IJintExtens
 
         var assetUrl = new EventDelegate(() =>
         {
-            if (context.TryGetValue("event", out var temp) && temp is EnrichedAssetEvent assetEvent)
+            if (engine.TryGetVar<EnrichedAssetEvent>("event", out var assetEvent))
             {
                 return urlGenerator.AssetContent(assetEvent.AppId, assetEvent.Id.ToString());
             }
@@ -109,8 +61,8 @@ public sealed class EventJintExtension(IUrlGenerator urlGenerator) : IJintExtens
             return JsValue.Null;
         });
 
-        context.Engine.SetValue("assetContentUrl", assetUrl);
-        context.Engine.SetValue("assetContentAppUrl", assetUrl);
+        engine.SetValue("assetContentUrl", assetUrl);
+        engine.SetValue("assetContentAppUrl", assetUrl);
     }
 
     public void Describe(AddDescription describe, ScriptScope scope)

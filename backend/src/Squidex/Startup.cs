@@ -27,6 +27,7 @@ public sealed class Startup(IConfiguration config)
         services.AddHealthChecks();
         services.AddDefaultWebServices(config);
         services.AddDefaultForwardRules();
+        services.AddSsrfProtectedHttpClient(config);
 
         // They must be called in this order.
         services.AddSquidexMvcWithPlugins(config);
@@ -37,14 +38,14 @@ public sealed class Startup(IConfiguration config)
         services.AddSquidexApps(config);
         services.AddSquidexAssetInfrastructure(config);
         services.AddSquidexAssets(config);
-        services.AddSquidexBackups();
+        services.AddSquidexBackups(config);
         services.AddSquidexCollaborations(config);
         services.AddSquidexCommands(config);
         services.AddSquidexContents(config);
         services.AddSquidexControllerServices(config);
         services.AddSquidexEventSourcing(config);
         services.AddSquidexFrontend(config);
-        services.AddSquidexGraphQL();
+        services.AddSquidexGraphQL(config);
         services.AddSquidexHealthChecks(config);
         services.AddSquidexHistory(config);
         services.AddSquidexImageResizing(config);
@@ -73,7 +74,7 @@ public sealed class Startup(IConfiguration config)
     {
         app.UseWebSockets();
         app.UseCookiePolicy();
-        app.UseDefaultPathBase();
+        app.UseFallbackPathBase();
         app.UseDefaultForwardRules();
         app.UseSquidexLogging();
         app.UseSquidexLocalization();

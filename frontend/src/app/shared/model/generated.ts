@@ -2171,6 +2171,241 @@ export interface IStorageUsagePerDateDto {
     readonly totalSize: number;
 }
 
+export class ScriptLogsDto implements IScriptLogsDto {
+    /** Uses the cache values because the actual object is frozen. */
+    private readonly cachedValues: { [key: string]: any } = {};
+    /** The script logs, newest first. */
+    readonly items!: ScriptLogDto[];
+
+    constructor(data?: IScriptLogsDto) {
+        if (data) {
+            for (var property in data) {
+                if (data.hasOwnProperty(property))
+                    (<any>this)[property] = (<any>data)[property];
+            }
+        }
+    }
+
+    init(_data: any) {
+        if (Array.isArray(_data["items"])) {
+            (<any>this).items = [] as any;
+            for (let item of _data["items"])
+                (<any>this).items!.push(ScriptLogDto.fromJSON(item));
+        }
+        this.cleanup(this);
+        return this;
+    }
+
+    static fromJSON(data: any): ScriptLogsDto {
+        const result = new ScriptLogsDto().init(data);
+        result.cleanup(this);
+        return result;
+    }
+
+    toJSON(data?: any) {
+        data = typeof data === 'object' ? data : {}; 
+        if (Array.isArray(this.items)) {
+            data["items"] = [];
+            for (let item of this.items)
+                data["items"].push(item.toJSON());
+        }
+        this.cleanup(data);
+        return data;
+    }
+
+    protected cleanup(target: any) {
+        for (var property in target) {
+            if (target.hasOwnProperty(property)) {
+                const value = target[property];
+                if (value === undefined) {
+                    delete target[property];
+                }
+            }
+        }
+    }
+
+    protected compute<T>(key: string, action: () => T): T {
+        if (!this.cachedValues.hasOwnProperty(key)) {
+            const value = action();
+            this.cachedValues[key] = value;
+            return value;
+        } else {
+            return this.cachedValues[key] as any;
+        }
+    }
+}
+
+export interface IScriptLogsDto {
+    /** The script logs, newest first. */
+    readonly items: ScriptLogDto[];
+}
+
+export class ScriptLogDto implements IScriptLogDto {
+    /** Uses the cache values because the actual object is frozen. */
+    private readonly cachedValues: { [key: string]: any } = {};
+    /** The ID of the log. */
+    readonly id!: string;
+    /** The name of the script, for example 'contents/my-schema/create' or 'assets/annotate'. */
+    readonly name!: string;
+    /** The time when the script has been executed. */
+    readonly timestamp!: DateTime;
+    /** The log entries. */
+    readonly entries!: ScriptLogEntryDto[];
+    /** The total number of entries the script has logged. Can be greater than the number of stored entries, because only the first entries are kept. */
+    readonly totalEntries!: number;
+
+    constructor(data?: IScriptLogDto) {
+        if (data) {
+            for (var property in data) {
+                if (data.hasOwnProperty(property))
+                    (<any>this)[property] = (<any>data)[property];
+            }
+        }
+    }
+
+    init(_data: any) {
+        (<any>this).id = _data["id"];
+        (<any>this).name = _data["name"];
+        (<any>this).timestamp = _data["timestamp"] ? DateTime.parseISO(_data["timestamp"].toString()) : <any>undefined;
+        if (Array.isArray(_data["entries"])) {
+            (<any>this).entries = [] as any;
+            for (let item of _data["entries"])
+                (<any>this).entries!.push(ScriptLogEntryDto.fromJSON(item));
+        }
+        (<any>this).totalEntries = _data["totalEntries"];
+        this.cleanup(this);
+        return this;
+    }
+
+    static fromJSON(data: any): ScriptLogDto {
+        const result = new ScriptLogDto().init(data);
+        result.cleanup(this);
+        return result;
+    }
+
+    toJSON(data?: any) {
+        data = typeof data === 'object' ? data : {}; 
+        data["id"] = this.id;
+        data["name"] = this.name;
+        data["timestamp"] = this.timestamp ? this.timestamp.toISOString() : <any>undefined;
+        if (Array.isArray(this.entries)) {
+            data["entries"] = [];
+            for (let item of this.entries)
+                data["entries"].push(item.toJSON());
+        }
+        data["totalEntries"] = this.totalEntries;
+        this.cleanup(data);
+        return data;
+    }
+
+    protected cleanup(target: any) {
+        for (var property in target) {
+            if (target.hasOwnProperty(property)) {
+                const value = target[property];
+                if (value === undefined) {
+                    delete target[property];
+                }
+            }
+        }
+    }
+
+    protected compute<T>(key: string, action: () => T): T {
+        if (!this.cachedValues.hasOwnProperty(key)) {
+            const value = action();
+            this.cachedValues[key] = value;
+            return value;
+        } else {
+            return this.cachedValues[key] as any;
+        }
+    }
+}
+
+export interface IScriptLogDto {
+    /** The ID of the log. */
+    readonly id: string;
+    /** The name of the script, for example 'contents/my-schema/create' or 'assets/annotate'. */
+    readonly name: string;
+    /** The time when the script has been executed. */
+    readonly timestamp: DateTime;
+    /** The log entries. */
+    readonly entries: ScriptLogEntryDto[];
+    /** The total number of entries the script has logged. Can be greater than the number of stored entries, because only the first entries are kept. */
+    readonly totalEntries: number;
+}
+
+export class ScriptLogEntryDto implements IScriptLogEntryDto {
+    /** Uses the cache values because the actual object is frozen. */
+    private readonly cachedValues: { [key: string]: any } = {};
+    /** The time when the entry has been logged. */
+    readonly timestamp!: DateTime;
+    /** The log level, for example 'log', 'info', 'warn' or 'error'. */
+    readonly level!: string;
+    /** The logged message. */
+    readonly message!: string;
+
+    constructor(data?: IScriptLogEntryDto) {
+        if (data) {
+            for (var property in data) {
+                if (data.hasOwnProperty(property))
+                    (<any>this)[property] = (<any>data)[property];
+            }
+        }
+    }
+
+    init(_data: any) {
+        (<any>this).timestamp = _data["timestamp"] ? DateTime.parseISO(_data["timestamp"].toString()) : <any>undefined;
+        (<any>this).level = _data["level"];
+        (<any>this).message = _data["message"];
+        this.cleanup(this);
+        return this;
+    }
+
+    static fromJSON(data: any): ScriptLogEntryDto {
+        const result = new ScriptLogEntryDto().init(data);
+        result.cleanup(this);
+        return result;
+    }
+
+    toJSON(data?: any) {
+        data = typeof data === 'object' ? data : {}; 
+        data["timestamp"] = this.timestamp ? this.timestamp.toISOString() : <any>undefined;
+        data["level"] = this.level;
+        data["message"] = this.message;
+        this.cleanup(data);
+        return data;
+    }
+
+    protected cleanup(target: any) {
+        for (var property in target) {
+            if (target.hasOwnProperty(property)) {
+                const value = target[property];
+                if (value === undefined) {
+                    delete target[property];
+                }
+            }
+        }
+    }
+
+    protected compute<T>(key: string, action: () => T): T {
+        if (!this.cachedValues.hasOwnProperty(key)) {
+            const value = action();
+            this.cachedValues[key] = value;
+            return value;
+        } else {
+            return this.cachedValues[key] as any;
+        }
+    }
+}
+
+export interface IScriptLogEntryDto {
+    /** The time when the entry has been logged. */
+    readonly timestamp: DateTime;
+    /** The log level, for example 'log', 'info', 'warn' or 'error'. */
+    readonly level: string;
+    /** The logged message. */
+    readonly message: string;
+}
+
 export class SearchResultDto extends ResourceDto implements ISearchResultDto {
     /** The name of the search result. */
     readonly name!: string;
@@ -2233,6 +2468,153 @@ export const SearchResultTypeValues: ReadonlyArray<SearchResultType> = [
 	"Schema"
 ];
 
+export class MigrateContentsDto implements IMigrateContentsDto {
+    /** Uses the cache values because the actual object is frozen. */
+    private readonly cachedValues: { [key: string]: any } = {};
+    /** True, to migrate the draft versions. Default: true. */
+    readonly migrateDraft?: boolean | undefined;
+    /** True, to migrate the published versions. Default: true. */
+    readonly migratePublished?: boolean | undefined;
+
+    constructor(data?: IMigrateContentsDto) {
+        if (data) {
+            for (var property in data) {
+                if (data.hasOwnProperty(property))
+                    (<any>this)[property] = (<any>data)[property];
+            }
+        }
+    }
+
+    init(_data: any) {
+        (<any>this).migrateDraft = _data["migrateDraft"];
+        (<any>this).migratePublished = _data["migratePublished"];
+        this.cleanup(this);
+        return this;
+    }
+
+    static fromJSON(data: any): MigrateContentsDto {
+        const result = new MigrateContentsDto().init(data);
+        result.cleanup(this);
+        return result;
+    }
+
+    toJSON(data?: any) {
+        data = typeof data === 'object' ? data : {}; 
+        data["migrateDraft"] = this.migrateDraft;
+        data["migratePublished"] = this.migratePublished;
+        this.cleanup(data);
+        return data;
+    }
+
+    protected cleanup(target: any) {
+        for (var property in target) {
+            if (target.hasOwnProperty(property)) {
+                const value = target[property];
+                if (value === undefined) {
+                    delete target[property];
+                }
+            }
+        }
+    }
+
+    protected compute<T>(key: string, action: () => T): T {
+        if (!this.cachedValues.hasOwnProperty(key)) {
+            const value = action();
+            this.cachedValues[key] = value;
+            return value;
+        } else {
+            return this.cachedValues[key] as any;
+        }
+    }
+}
+
+export interface IMigrateContentsDto {
+    /** True, to migrate the draft versions. Default: true. */
+    readonly migrateDraft?: boolean | undefined;
+    /** True, to migrate the published versions. Default: true. */
+    readonly migratePublished?: boolean | undefined;
+}
+
+export class ExportContentsDto implements IExportContentsDto {
+    /** Uses the cache values because the actual object is frozen. */
+    private readonly cachedValues: { [key: string]: any } = {};
+    /** The format of the exported file. Default: Csv. */
+    readonly format?: ExportFormat | undefined;
+    /** The optional comma separated list of fields in the format 'name=path', for example 'id,Title=data.title.en'. */
+    readonly fields?: string | undefined;
+    /** True, to export the unpublished versions. Default: false. */
+    readonly unpublished?: boolean | undefined;
+
+    constructor(data?: IExportContentsDto) {
+        if (data) {
+            for (var property in data) {
+                if (data.hasOwnProperty(property))
+                    (<any>this)[property] = (<any>data)[property];
+            }
+        }
+    }
+
+    init(_data: any) {
+        (<any>this).format = _data["format"];
+        (<any>this).fields = _data["fields"];
+        (<any>this).unpublished = _data["unpublished"];
+        this.cleanup(this);
+        return this;
+    }
+
+    static fromJSON(data: any): ExportContentsDto {
+        const result = new ExportContentsDto().init(data);
+        result.cleanup(this);
+        return result;
+    }
+
+    toJSON(data?: any) {
+        data = typeof data === 'object' ? data : {};
+        data["format"] = this.format;
+        data["fields"] = this.fields;
+        data["unpublished"] = this.unpublished;
+        this.cleanup(data);
+        return data;
+    }
+
+    protected cleanup(target: any) {
+        for (var property in target) {
+            if (target.hasOwnProperty(property)) {
+                const value = target[property];
+                if (value === undefined) {
+                    delete target[property];
+                }
+            }
+        }
+    }
+
+    protected compute<T>(key: string, action: () => T): T {
+        if (!this.cachedValues.hasOwnProperty(key)) {
+            const value = action();
+            this.cachedValues[key] = value;
+            return value;
+        } else {
+            return this.cachedValues[key] as any;
+        }
+    }
+}
+
+export interface IExportContentsDto {
+    /** The format of the exported file. Default: Csv. */
+    readonly format?: ExportFormat | undefined;
+    /** The optional comma separated list of fields in the format 'name=path', for example 'id,Title=data.title.en'. */
+    readonly fields?: string | undefined;
+    /** True, to export the unpublished versions. Default: false. */
+    readonly unpublished?: boolean | undefined;
+}
+
+export type ExportFormat = "Csv" | "Json";
+
+export const ExportFormatValues: ReadonlyArray<ExportFormat> = [
+	"Csv",
+	"Json"
+];
+
 export class SchemaDto extends ResourceDto implements ISchemaDto {
     /** The ID of the schema. */
     readonly id!: string;
@@ -2281,6 +2663,14 @@ export class SchemaDto extends ResourceDto implements ISchemaDto {
 
     public get canContentsCreateAndPublish() {
         return this.compute('canContentsCreateAndPublish', () => hasAnyLink(this._links, 'contents/create/publish'));
+    }
+
+    public get canContentsExport() {
+        return this.compute('canContentsExport', () => hasAnyLink(this._links, 'contents/export'));
+    }
+
+    public get canContentsMigrate() {
+        return this.compute('canContentsMigrate', () => hasAnyLink(this._links, 'contents/migrate'));
     }
 
     public get canContentsRead() {
@@ -2734,6 +3124,8 @@ export class SchemaScriptsDto implements ISchemaScriptsDto {
     readonly delete?: string | undefined;
     /** The script that is executed when change a content status. */
     readonly change?: string | undefined;
+    /** The script that is executed when a content is indexed for the full text search. */
+    readonly index?: string | undefined;
 
     constructor(data?: ISchemaScriptsDto) {
         if (data) {
@@ -2751,6 +3143,7 @@ export class SchemaScriptsDto implements ISchemaScriptsDto {
         (<any>this).update = _data["update"];
         (<any>this).delete = _data["delete"];
         (<any>this).change = _data["change"];
+        (<any>this).index = _data["index"];
         this.cleanup(this);
         return this;
     }
@@ -2769,6 +3162,7 @@ export class SchemaScriptsDto implements ISchemaScriptsDto {
         data["update"] = this.update;
         data["delete"] = this.delete;
         data["change"] = this.change;
+        data["index"] = this.index;
         this.cleanup(data);
         return data;
     }
@@ -2808,6 +3202,8 @@ export interface ISchemaScriptsDto {
     readonly delete?: string | undefined;
     /** The script that is executed when change a content status. */
     readonly change?: string | undefined;
+    /** The script that is executed when a content is indexed for the full text search. */
+    readonly index?: string | undefined;
 }
 
 export class FieldRuleDto implements IFieldRuleDto {
@@ -3059,6 +3455,10 @@ export abstract class FieldPropertiesDto implements IFieldPropertiesDto {
     readonly editorUrl?: string | undefined;
     /** Tags for automation processes. */
     readonly tags?: string[] | undefined;
+    /** Defines how the field is used for the full text search. */
+    readonly searchMode?: FieldSearchMode;
+    /** Optional paths to the values that are indexed for the full text search, e.g. 'items.label'. */
+    readonly searchPaths?: string[] | undefined;
 
     public get isComplexUI() {
         return true;
@@ -3103,6 +3503,12 @@ export abstract class FieldPropertiesDto implements IFieldPropertiesDto {
             (<any>this).tags = [] as any;
             for (let item of _data["tags"])
                 (<any>this).tags!.push(item);
+        }
+        (<any>this).searchMode = _data["searchMode"];
+        if (Array.isArray(_data["searchPaths"])) {
+            (<any>this).searchPaths = [] as any;
+            for (let item of _data["searchPaths"])
+                (<any>this).searchPaths!.push(item);
         }
         this.cleanup(this);
         return this;
@@ -3173,6 +3579,12 @@ export abstract class FieldPropertiesDto implements IFieldPropertiesDto {
             for (let item of this.tags)
                 data["tags"].push(item);
         }
+        data["searchMode"] = this.searchMode;
+        if (Array.isArray(this.searchPaths)) {
+            data["searchPaths"] = [];
+            for (let item of this.searchPaths)
+                data["searchPaths"].push(item);
+        }
         this.cleanup(data);
         return data;
     }
@@ -3218,7 +3630,19 @@ export interface IFieldPropertiesDto {
     readonly editorUrl?: string | undefined;
     /** Tags for automation processes. */
     readonly tags?: string[] | undefined;
+    /** Defines how the field is used for the full text search. */
+    readonly searchMode?: FieldSearchMode;
+    /** Optional paths to the values that are indexed for the full text search, e.g. 'items.label'. */
+    readonly searchPaths?: string[] | undefined;
 }
+
+export type FieldSearchMode = "Default" | "Title" | "Exclude";
+
+export const FieldSearchModeValues: ReadonlyArray<FieldSearchMode> = [
+	"Default",
+	"Title",
+	"Exclude"
+];
 
 export class ArrayFieldPropertiesDto extends FieldPropertiesDto implements IArrayFieldPropertiesDto {
     /** The minimum allowed items for the field value. */
@@ -10978,6 +11402,10 @@ export class JobsDto extends ResourceDto implements IJobsDto {
         return this.compute('canCreateBackup', () => hasAnyLink(this._links, 'create/backups'));
     }
 
+    public get canRebuildTextIndex() {
+        return this.compute('canRebuildTextIndex', () => hasAnyLink(this._links, 'create/text-index'));
+    }
+
     constructor(data?: IJobsDto) {
         super(data);
     }
@@ -11028,6 +11456,8 @@ export class JobDto extends ResourceDto implements IJobDto {
     readonly status!: JobStatus;
     /** The name of the task. */
     readonly taskName!: string;
+    /** The optional reference that has been passed in when the job has been started. */
+    readonly reference?: string | undefined;
     /** The description of the job. */
     readonly description!: string;
     /** The arguments for the job. */
@@ -11064,6 +11494,7 @@ export class JobDto extends ResourceDto implements IJobDto {
         (<any>this).stopped = _data["stopped"] ? DateTime.parseISO(_data["stopped"].toString()) : <any>undefined;
         (<any>this).status = _data["status"];
         (<any>this).taskName = _data["taskName"];
+        (<any>this).reference = _data["reference"];
         (<any>this).description = _data["description"];
         if (_data["taskArguments"]) {
             (<any>this).taskArguments = {} as any;
@@ -11095,6 +11526,7 @@ export class JobDto extends ResourceDto implements IJobDto {
         data["stopped"] = this.stopped ? this.stopped.toISOString() : <any>undefined;
         data["status"] = this.status;
         data["taskName"] = this.taskName;
+        data["reference"] = this.reference;
         data["description"] = this.description;
         if (this.taskArguments) {
             data["taskArguments"] = {};
@@ -11126,6 +11558,8 @@ export interface IJobDto extends IResourceDto {
     readonly status: JobStatus;
     /** The name of the task. */
     readonly taskName: string;
+    /** The optional reference that has been passed in when the job has been started. */
+    readonly reference?: string | undefined;
     /** The description of the job. */
     readonly description: string;
     /** The arguments for the job. */
@@ -11544,7 +11978,7 @@ export class ContentDto extends ResourceDto implements IContentDto {
     }
 
     public get canDelete() {
-        return this.compute('canDelete', () => hasAnyLink(this._links, 'update'));
+        return this.compute('canDelete', () => hasAnyLink(this._links, 'delete'));
     }
 
     public get canDraftCreate() {
@@ -12222,8 +12656,10 @@ export class BulkUpdateContentsJobDto implements IBulkUpdateContentsJobDto {
     readonly query?: QueryJsonDto | undefined;
     /** An optional ID of the content to update. */
     readonly id?: string | undefined;
-    /** The data of the content when type is set to 'Upsert', 'Create', 'Update' or 'Patch. */
+    /** The data of the content when type is set to 'Upsert', 'Create', 'Update', 'Patch' or 'Migrate'. */
     readonly data?: { [key: string]: { [key: string]: any; }; } | undefined;
+    /** The data of the new version (draft) when the type is set to 'Migrate'. */
+    readonly newData?: { [key: string]: { [key: string]: any; }; } | undefined;
     /** The new status when the type is set to 'ChangeStatus' or 'Upsert'. */
     readonly status?: string | undefined;
     /** The due time. */
@@ -12262,6 +12698,13 @@ export class BulkUpdateContentsJobDto implements IBulkUpdateContentsJobDto {
                     (<any>(<any>this).data)![key] = _data["data"][key];
             }
         }
+        if (_data["newData"]) {
+            (<any>this).newData = {} as any;
+            for (let key in _data["newData"]) {
+                if (_data["newData"].hasOwnProperty(key))
+                    (<any>(<any>this).newData)![key] = _data["newData"][key];
+            }
+        }
         (<any>this).status = _data["status"];
         (<any>this).dueTime = _data["dueTime"] ? DateTime.parseISO(_data["dueTime"].toString()) : <any>undefined;
         (<any>this).type = _data["type"];
@@ -12290,6 +12733,13 @@ export class BulkUpdateContentsJobDto implements IBulkUpdateContentsJobDto {
             for (let key in this.data) {
                 if (this.data.hasOwnProperty(key))
                     (<any>data["data"])[key] = (<any>this.data)[key];
+            }
+        }
+        if (this.newData) {
+            data["newData"] = {};
+            for (let key in this.newData) {
+                if (this.newData.hasOwnProperty(key))
+                    (<any>data["newData"])[key] = (<any>this.newData)[key];
             }
         }
         data["status"] = this.status;
@@ -12332,8 +12782,10 @@ export interface IBulkUpdateContentsJobDto {
     readonly query?: QueryJsonDto | undefined;
     /** An optional ID of the content to update. */
     readonly id?: string | undefined;
-    /** The data of the content when type is set to 'Upsert', 'Create', 'Update' or 'Patch. */
+    /** The data of the content when type is set to 'Upsert', 'Create', 'Update', 'Patch' or 'Migrate'. */
     readonly data?: { [key: string]: { [key: string]: any; }; } | undefined;
+    /** The data of the new version (draft) when the type is set to 'Migrate'. */
+    readonly newData?: { [key: string]: { [key: string]: any; }; } | undefined;
     /** The new status when the type is set to 'ChangeStatus' or 'Upsert'. */
     readonly status?: string | undefined;
     /** The due time. */
@@ -12512,7 +12964,7 @@ export interface ISortNodeDto {
     readonly order: SortOrder;
 }
 
-export type BulkUpdateContentType = "Upsert" | "ChangeStatus" | "Create" | "Delete" | "Patch" | "Update" | "Validate" | "EnrichDefaults";
+export type BulkUpdateContentType = "Upsert" | "ChangeStatus" | "Create" | "Delete" | "Patch" | "Update" | "Validate" | "EnrichDefaults" | "Migrate";
 
 export const BulkUpdateContentTypeValues: ReadonlyArray<BulkUpdateContentType> = [
 	"Upsert",
@@ -12522,7 +12974,8 @@ export const BulkUpdateContentTypeValues: ReadonlyArray<BulkUpdateContentType> =
 	"Patch",
 	"Update",
 	"Validate",
-	"EnrichDefaults"
+	"EnrichDefaults",
+	"Migrate"
 ];
 
 export class ChangeStatusDto implements IChangeStatusDto {
@@ -14399,6 +14852,10 @@ export class ClientDto extends ResourceDto implements IClientDto {
     /** True to allow anonymous access without an access token for this client. */
     readonly allowAnonymous!: boolean;
 
+    public get canRegenerateSecret() {
+        return this.compute('canRegenerateSecret', () => hasAnyLink(this._links, 'secret'));
+    }
+
     public get canRevoke() {
         return this.compute('canRevoke', () => hasAnyLink(this._links, 'delete'));
     }
@@ -15250,6 +15707,10 @@ export class AppDto extends ResourceDto implements IAppDto {
 
     public get canReadSchemas() {
         return this.compute('canReadSchemas', () => hasAnyLink(this._links, 'schemas'));
+    }
+
+    public get canReadScriptLogs() {
+        return this.compute('canReadScriptLogs', () => hasAnyLink(this._links, 'script-logs'));
     }
 
     public get canReadWorkflows() {

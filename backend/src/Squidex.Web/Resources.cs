@@ -21,6 +21,8 @@ public sealed class Resources(ApiController controller)
     // Contents
     public bool CanReadContent(string schema) => Can(PermissionIds.AppContentsReadOwn, schema);
 
+    public bool CanExportContents(string schema) => Can(PermissionIds.AppContentsRead, schema);
+
     public bool CanCreateContent(string schema) => Can(PermissionIds.AppContentsCreate, schema);
 
     public bool CanCreateContentVersion(string schema) => Can(PermissionIds.AppContentsVersionCreateOwn, schema);
@@ -45,6 +47,8 @@ public sealed class Resources(ApiController controller)
     public bool CanDeleteSchema(string schema) => Can(PermissionIds.AppSchemasDelete, schema);
 
     public bool CanManageIndexes(string schema) => Can(PermissionIds.AppSchemasIndexes, schema);
+
+    public bool CanMigrateSchemaContents(string schema) => Can(PermissionIds.AppSchemasMigrate, schema);
 
     public bool CanCreateSchema => Can(PermissionIds.AppSchemasCreate);
 
@@ -145,6 +149,8 @@ public sealed class Resources(ApiController controller)
     // Backups
     public bool CanRestoreBackup => Can(PermissionIds.AdminRestore);
 
+    public bool CanRebuildTextIndex => Can(PermissionIds.AdminTextIndex);
+
     public bool CanCreateBackup => Can(PermissionIds.AppJobs);
 
     // Jobs
@@ -170,7 +176,6 @@ public sealed class Resources(ApiController controller)
         var url = Controller.Url(action, values);
 
         var basePath = Controller.HttpContext.Request.PathBase;
-
         if (url.StartsWith(Controller.HttpContext.Request.PathBase, StringComparison.OrdinalIgnoreCase))
         {
             url = url[basePath.Value!.Length..];

@@ -69,8 +69,13 @@ public class EventConsumerProcessor : IEventSubscriber<ParsedEvents>
             }
             catch (Exception ex)
             {
-                log.LogCritical(ex, "Failed to complete consumer.");
+                LogMessages.LogFailedToCompleteConsumer(log, ex);
             }
+        }
+
+        using (await asyncLock.EnterAsync())
+        {
+            // Acquire the lock to ensure any in-flight UpdateAsync has fully completed before returning.
         }
     }
 
@@ -102,7 +107,7 @@ public class EventConsumerProcessor : IEventSubscriber<ParsedEvents>
 
             if (logWindow.CanRetryAfterFailure())
             {
-                log.LogError(exception, "Failed to handle event.");
+                LogMessages.LogFailedToHandleEvent(log, exception);
             }
         }, State.Position);
     }
@@ -170,7 +175,7 @@ public class EventConsumerProcessor : IEventSubscriber<ParsedEvents>
         }, State.Position);
     }
 
-    private async Task DispatchAsync(IReadOnlyList<Envelope<IEvent>> events)
+    private async Task DispatchAsync(List<Envelope<IEvent>> events)
     {
         if (events.Count > 0)
         {
@@ -210,8 +215,7 @@ public class EventConsumerProcessor : IEventSubscriber<ParsedEvents>
                     ex = new AggregateException(ex, unsubscribeException);
                 }
 
-                log.LogCritical(ex, "Failed to update consumer {consumer} at position {position} from {caller}.",
-                    eventConsumer.Name, position, caller);
+                LogMessages.LogFailedToUpdateConsumer(log, eventConsumer.Name, position, caller, ex);
 
                 State = previousState.Stopped(ex);
             }
@@ -228,7 +232,7 @@ public class EventConsumerProcessor : IEventSubscriber<ParsedEvents>
     {
         if (log.IsEnabled(LogLevel.Debug))
         {
-            log.LogDebug("Event consumer {consumer} reset started", eventConsumer.Name);
+            LogMessages.LogEventConsumerResetStarted(log, eventConsumer.Name);
         }
 
         var watch = ValueStopwatch.StartNew();
@@ -238,17 +242,14 @@ public class EventConsumerProcessor : IEventSubscriber<ParsedEvents>
         }
         finally
         {
-            log.LogDebug("Event consumer {consumer} reset completed after {time}ms.", eventConsumer.Name, watch.Stop());
+            LogMessages.LogEventConsumerResetCompleted(log, eventConsumer.Name, watch.Stop());
         }
     }
 
     private void Unsubscribe()
     {
-        if (currentSubscription != null)
-        {
-            currentSubscription.Dispose();
-            currentSubscription = null;
-        }
+        currentSubscription?.Dispose();
+        currentSubscription = null;
     }
 
     private void Subscribe()

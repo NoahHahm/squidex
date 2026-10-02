@@ -17,7 +17,6 @@ using Squidex.Domain.Apps.Entities.Contents;
 using Squidex.Domain.Apps.Entities.Contents.Repositories;
 using Squidex.Hosting;
 using Squidex.Infrastructure;
-using Squidex.Infrastructure.Json.Objects;
 using Squidex.Infrastructure.Queries;
 using Squidex.Infrastructure.States;
 
@@ -65,6 +64,12 @@ public partial class MongoContentRepository(
         CancellationToken ct = default)
     {
         return GetCollection(scope).StreamAll(appId, schemaIds, ct);
+    }
+
+    public IAsyncEnumerable<WriteContent> StreamWriteContents(DomainId appId, HashSet<DomainId>? schemaIds, HashSet<DomainId>? ids,
+        CancellationToken ct = default)
+    {
+        return collectionComplete.StreamWriteContents(appId, schemaIds, ids, ct);
     }
 
     public IAsyncEnumerable<Content> StreamReferencing(DomainId appId, DomainId reference, int take, SearchScope scope,

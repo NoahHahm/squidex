@@ -11,10 +11,9 @@ namespace Squidex.Domain.Apps.Entities;
 
 public static class ContextHeaders
 {
-    private static readonly char[] Separators = [',', ';'];
-
     public const string KeyBatchSize = "X-BatchSize";
     public const string KeyNoCacheKeys = "X-NoCacheKeys";
+    public const string KeyNoQueryCache = "X-NoQueryCache";
     public const string KeyNoScripting = "X-NoScripting";
     public const string KeyNoSlowTotal = "X-NoSlowTotal";
     public const string KeyNoTotal = "X-NoTotal";
@@ -37,6 +36,16 @@ public static class ContextHeaders
     public static ICloneBuilder WithNoCacheKeys(this ICloneBuilder builder, bool value = true)
     {
         return builder.WithBoolean(KeyNoCacheKeys, value);
+    }
+
+    public static bool NoQueryCache(this Context context)
+    {
+        return context.AsBoolean(KeyNoQueryCache);
+    }
+
+    public static ICloneBuilder WithNoQueryCache(this ICloneBuilder builder, bool value = true)
+    {
+        return builder.WithBoolean(KeyNoQueryCache, value);
     }
 
     public static bool NoScripting(this Context context)
@@ -128,11 +137,8 @@ public static class ContextHeaders
 
     public static IEnumerable<string> AsStrings(this Context context, string key)
     {
-        if (context.Headers.TryGetValue(key, out var value))
-        {
-            return value.Split(Separators, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Distinct();
-        }
-
-        return [];
+        // The context parses the header once and keeps the result, because the same headers are
+        // read several times while a query is enriched.
+        return context.HeaderValues(key);
     }
 }

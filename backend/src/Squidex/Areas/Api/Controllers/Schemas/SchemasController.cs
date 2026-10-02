@@ -30,7 +30,7 @@ namespace Squidex.Areas.Api.Controllers.Schemas;
 [ApiExplorerSettings(GroupName = nameof(Schemas))]
 public sealed class SchemasController(
     ICommandBus commandBus,
-    IContentWorkflow workflow,
+    IContentWorkflows workflows,
     IAppProvider appProvider,
     SchemaAIGenerator schemaAIGenerator,
     ScriptingCompleter scriptingCompleter)
@@ -392,17 +392,17 @@ public sealed class SchemasController(
     [ApiExplorerSettings(IgnoreApi = true)]
     public async Task<IActionResult> GetFilters(string app, string schema)
     {
-        var components = await appProvider.GetComponentsAsync(Schema, HttpContext.RequestAborted);
+        var components = await appProvider.GetComponentsAsync(Schema, ct: HttpContext.RequestAborted);
 
         var result = ContentQueryModel.Build(Schema, App.PartitionResolver(), components).Flatten();
-        var response = await QueryModelDto.FromModelAsync(result, Schema, workflow);
+        var response = await QueryModelDto.FromModelAsync(result, App, Schema, workflows);
 
         return Ok(response);
     }
 
     private async Task<FilterSchema> BuildModel()
     {
-        var components = await appProvider.GetComponentsAsync(Schema, HttpContext.RequestAborted);
+        var components = await appProvider.GetComponentsAsync(Schema, ct: HttpContext.RequestAborted);
 
         return Schema.BuildDataSchema(App.PartitionResolver(), components);
     }

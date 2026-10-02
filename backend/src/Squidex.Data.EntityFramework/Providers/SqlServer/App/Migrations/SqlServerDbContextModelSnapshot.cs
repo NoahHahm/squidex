@@ -18,7 +18,7 @@ namespace Squidex.Providers.SqlServer.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.5")
+                .HasAnnotation("ProductVersion", "10.0.6")
                 .HasAnnotation("Relational:MaxIdentifierLength", 128);
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
@@ -308,8 +308,8 @@ namespace Squidex.Providers.SqlServer.Migrations
                         .HasColumnType("nvarchar(400)");
 
                     b.Property<string>("Type")
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
 
                     b.HasKey("Id");
 
@@ -333,13 +333,14 @@ namespace Squidex.Providers.SqlServer.Migrations
                     b.Property<DateTime>("LastUpdated")
                         .HasColumnType("datetime2");
 
+                    b.Property<Guid>("LastVersion")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("Version");
+
                     b.Property<string>("Value")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
-
-                    b.Property<Guid>("Version")
-                        .IsConcurrencyToken()
-                        .HasColumnType("uniqueidentifier");
 
                     b.HasKey("Id");
 
@@ -366,6 +367,41 @@ namespace Squidex.Providers.SqlServer.Migrations
                     b.HasIndex("Expires");
 
                     b.ToTable("AssetKeyValueStore_TusMetadata", (string)null);
+                });
+
+            modelBuilder.Entity("Squidex.Domain.Apps.Core.Scripting.ScriptLogRecord", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<string>("AppId")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<string>("Entries")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<DateTimeOffset>("Timestamp")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<int>("TotalEntries")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Timestamp");
+
+                    b.HasIndex("AppId", "Timestamp");
+
+                    b.ToTable("ScriptLogs", (string)null);
                 });
 
             modelBuilder.Entity("Squidex.Domain.Apps.Entities.Apps.EFAppEntity", b =>
@@ -946,6 +982,9 @@ namespace Squidex.Providers.SqlServer.Migrations
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
+
+                    b.Property<long?>("Version")
+                        .HasColumnType("bigint");
 
                     b.HasKey("UniqueContentId");
 

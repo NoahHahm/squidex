@@ -10,7 +10,7 @@ import { booleanAttribute, ChangeDetectionStrategy, Component, EventEmitter, Inp
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { BooleanValue, BootstrapClasses, EMPTY_FILTER_MODEL, FieldComponent, FilterField, Input as FilterInput, FilterModel, FilterOptions, NumberValue, SelectValue, StringValue } from 'ngx-inline-filter';
 import { Observable } from 'rxjs';
-import { DateTimeEditorComponent, DropdownComponent, FocusOnInitDirective, FormRowComponent, HighlightPipe, LocalizerService, ModalDialogComponent, ModalDirective, ShortcutComponent, TooltipDirective, TourStepDirective, TranslatePipe, Types } from '@app/framework';
+import { DateTimeEditorComponent, DropdownComponent, FocusOnInitDirective, FormErrorComponent, FormRowComponent, HighlightPipe, LocalizerService, ModalDialogComponent, ModalDirective, ShortcutComponent, TooltipDirective, TourStepDirective, TranslatePipe, Types } from '@app/framework';
 import { AppLanguageDto, ContributorsState, DialogModel, Queries, Query, QueryModel, sanitize, SaveQueryForm, TypedSimpleChanges } from '@app/shared/internal';
 import { UserDtoPicture } from '../pipes';
 import { ReferenceInputComponent } from '../references/reference-input.component';
@@ -40,6 +40,7 @@ import { TourHintDirective } from '../tour-hint.directive';
         TourStepDirective,
         TranslatePipe,
         UserDtoPicture,
+        FormErrorComponent,
     ],
 })
 export class SearchFormComponent {
@@ -99,10 +100,12 @@ export class SearchFormComponent {
                 addComparison: localizer.getOrKey('search.addFilter'),
                 addGroup: localizer.getOrKey('search.addGroup'),
                 addSorting: localizer.getOrKey('search.addSorting'),
+                apply: localizer.getOrKey('common.search'),
                 and: 'AND',
                 not: 'NOT',
                 noResults: ' - ',
                 or: 'OR',
+                reset: localizer.getOrKey('common.reset'),
                 save: localizer.getOrKey('common.save'),
                 searchPlaceholder: localizer.getOrKey('common.search'),
                 searchShortcut: 'CTRL + I',
@@ -215,16 +218,19 @@ export class SearchFormComponent {
 
     public saveQueryComplete() {
         const value = this.saveQueryForm.submit();
-        if (!value) {
+        if (!value || !this.queries) {
             return;
         }
 
-        if (this.queries && this.query) {
-            if (value.user) {
-                this.queries.addUser(value.name, this.query);
-            } else {
-                this.queries.addShared(value.name, this.query);
-            }
+        if (!this.query) {
+            this.saveQueryForm.submitFailed('i18n:search.queryNotUsed')
+            return;
+        }
+
+        if (value.user) {
+            this.queries.addUser(value.name, this.query);
+        } else {
+            this.queries.addShared(value.name, this.query);
         }
 
         this.saveQueryForm.submitCompleted();

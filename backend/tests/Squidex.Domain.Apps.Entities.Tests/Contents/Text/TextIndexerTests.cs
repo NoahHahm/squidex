@@ -5,9 +5,13 @@
 //  All rights reserved. Licensed under the MIT license.
 // ==========================================================================
 
+using Microsoft.Extensions.Logging;
 using Squidex.Domain.Apps.Core.Contents;
+using Squidex.Domain.Apps.Core.Scripting;
 using Squidex.Domain.Apps.Core.TestHelpers;
+using Squidex.Domain.Apps.Entities.Contents.Text.Rebuild;
 using Squidex.Domain.Apps.Entities.Contents.Text.State;
+using Squidex.Domain.Apps.Entities.Jobs;
 using Squidex.Domain.Apps.Entities.TestHelpers;
 using Squidex.Domain.Apps.Events.Contents;
 using Squidex.Events;
@@ -21,6 +25,7 @@ namespace Squidex.Domain.Apps.Entities.Contents.Text;
 
 public abstract class TextIndexerTests : GivenContext
 {
+    private readonly Dictionary<DomainId, long> versions = [];
     private TextIndexingProcess? process;
 
     protected List<DomainId> Ids1 { get; } = [DomainId.NewGuid()];
@@ -297,6 +302,69 @@ public abstract class TextIndexerTests : GivenContext
     }
 
     [Fact]
+    public async Task Should_migrate_current_version()
+    {
+        // Create initial content.
+        await CreateTextAsync(Ids1[0], "iv", "Version1");
+
+        // Publish the content.
+        await PublishAsync(Ids1[0]);
+
+        // Migrate the only version.
+        await MigrateTextAsync(Ids1[0], "iv", "Migrated1", null);
+
+        await SearchText(expected: null, text: "Version1", target: SearchScope.All);
+        await SearchText(expected: null, text: "Version1", target: SearchScope.Published);
+
+        await SearchText(expected: Ids1, text: "Migrated1", target: SearchScope.All);
+        await SearchText(expected: Ids1, text: "Migrated1", target: SearchScope.Published);
+    }
+
+    [Fact]
+    public async Task Should_migrate_published_and_draft_version()
+    {
+        // Create initial content.
+        await CreateTextAsync(Ids1[0], "iv", "Version1");
+
+        // Publish the content and create a new version with other data.
+        await PublishAsync(Ids1[0]);
+        await CreateDraftWithTextAsync(Ids1[0], "iv", "Version2");
+
+        // Migrate both versions.
+        await MigrateTextAsync(Ids1[0], "iv", "Migrated1", "Migrated2");
+
+        await SearchText(expected: null, text: "Version1", target: SearchScope.Published);
+        await SearchText(expected: null, text: "Version2", target: SearchScope.All);
+
+        await SearchText(expected: Ids1, text: "Migrated1", target: SearchScope.Published);
+        await SearchText(expected: null, text: "Migrated1", target: SearchScope.All);
+
+        await SearchText(expected: Ids1, text: "Migrated2", target: SearchScope.All);
+        await SearchText(expected: null, text: "Migrated2", target: SearchScope.Published);
+    }
+
+    [Fact]
+    public async Task Should_migrate_published_version_only()
+    {
+        // Create initial content.
+        await CreateTextAsync(Ids1[0], "iv", "Version1");
+
+        // Publish the content and create a new version with other data.
+        await PublishAsync(Ids1[0]);
+        await CreateDraftWithTextAsync(Ids1[0], "iv", "Version2");
+
+        // Migrate the published version only.
+        await MigrateTextAsync(Ids1[0], "iv", "Migrated1", null);
+
+        await SearchText(expected: Ids1, text: "Migrated1", target: SearchScope.Published);
+        await SearchText(expected: null, text: "Migrated1", target: SearchScope.All);
+
+        // The new version must not be changed.
+        await SearchText(expected: Ids1, text: "Version2", target: SearchScope.All);
+        await SearchText(expected: null, text: "Version2", target: SearchScope.Published);
+    }
+
+    [Fact]
     public async Task Should_simulate_content_reversion()
     {
         await CreateTextAsync(Ids1[0], "iv", "Version1");
@@ -395,6 +463,14 @@ public abstract class TextIndexerTests : GivenContext
         return UpdateAsync(id, new ContentDraftCreated { MigratedData = data });
     }
 
+    protected Task MigrateTextAsync(DomainId id, string language, string? text, string? newText)
+    {
+        var data = text != null ? TextData(language, text) : null;
+        var newData = newText != null ? TextData(language, newText) : null;
+
+        return UpdateAsync(id, new ContentMigrated { Data = data, NewData = newData });
+    }
+
     protected Task CreateDraftAsync(DomainId id)
     {
         return UpdateAsync(id, new ContentDraftCreated());
@@ -428,7 +504,12 @@ public abstract class TextIndexerTests : GivenContext
         contentEvent.AppId = AppId;
         contentEvent.SchemaId = SchemaId;
 
-        await sut.On(Enumerable.Repeat(Envelope.Create<IEvent>(contentEvent), 1));
+        // The indexer ignores events with versions that have already been indexed.
+        var version = versions.GetValueOrDefault(id, -1) + 1;
+
+        versions[id] = version;
+
+        await sut.On([Envelope.Create<IEvent>(contentEvent).SetEventStreamNumber(version)]);
     }
 
     private static ContentData TextData(string language, string text)
@@ -556,7 +637,11 @@ public abstract class TextIndexerTests : GivenContext
         {
             var index = await CreateSutAsync();
 
-            process = new TextIndexingProcess(TestUtils.DefaultSerializer, index, new InMemoryTextIndexerState());
+            var coordinator = new TextIndexRebuildCoordinator();
+
+            var extraction = new TextIndexExtraction(AppProvider, TextExtractorTests.CreateExtractor(A.Fake<IScriptEngine>()));
+
+            process = new TextIndexingProcess(TestUtils.DefaultSerializer, index, new InMemoryTextIndexerState(), extraction, coordinator);
         }
 
         return process;

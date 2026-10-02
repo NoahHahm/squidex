@@ -1,0 +1,62 @@
+@import 'mixins';
+@import 'vars';
+
+
+h4 {
+    font-size: 1rem;
+    font-weight: 500;
+    margin: 0;
+}
+
+.console {
+    background: $color-console-background;
+    border-bottom-left-radius: $border-radius;
+    border-bottom-right-radius: $border-radius;
+    color: $color-console-text;
+    font-family: monospace;
+    font-size: .85rem;
+    line-height: 1.5;
+    max-height: 30rem;
+    overflow-y: hidden;
+    overflow-y: auto;
+    padding: .75rem 1rem;
+
+    &-line {
+        white-space: pre-wrap;
+        word-break: break-word;
+    }
+
+    &-level {
+        display: inline-block;
+        margin-left: 1rem;
+        margin-right: 1rem;
+        min-width: 7ch;
+    }
+
+    &-time,
+    &-debug {
+        color: $color-console-muted;
+    }
+
+    &-info {
+        color: $color-console-info;
+    }
+
+    &-warn {
+        color: $color-console-warn;
+    }
+
+    &-error {
+        color: $color-console-error;
+    }
+
+    &-omitted {
+        color: $color-console-muted;
+        font-style: italic;
+        font-weight: normal;
+    }
+}
+
+.btn-expand.expanded::before {
+    bottom: -1.35rem;
+}
